@@ -47,16 +47,16 @@ streamlit run app.py
 
 Your CSV must have these columns:
 
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| project_id | string | Yes | Project identifier (e.g. `P01`) |
-| time_period | string | Yes | Reporting period (e.g. `Month-1`) |
-| pmb_budget | numeric | Yes | Planned budget for the period (≥ 0) |
-| actual_cost | numeric | Yes | Actual cost incurred in the period (≥ 0) |
-| progress_pct | numeric | Yes | Cumulative progress percentage (0–100) |
-| revenue_claimed | numeric | Yes | Revenue claimed in the period (≥ 0) |
-| actual_date | datetime | Yes | Date of the cost record |
-| baseline_start_date | datetime | Yes | Project baseline start date |
+| Column              | Type     | Required | Description                              |
+| ---------------------| ----------| ----------| ------------------------------------------|
+| project_id          | string   | Yes      | Project identifier (e.g. `P01`)          |
+| time_period         | string   | Yes      | Reporting period (e.g. `Month-1`)        |
+| pmb_budget          | numeric  | Yes      | Planned budget for the period (≥ 0)      |
+| actual_cost         | numeric  | Yes      | Actual cost incurred in the period (≥ 0) |
+| progress_pct        | numeric  | Yes      | Cumulative progress percentage (0–100)   |
+| revenue_claimed     | numeric  | Yes      | Revenue claimed in the period (≥ 0)      |
+| actual_date         | datetime | Yes      | Date of the cost record                  |
+| baseline_start_date | datetime | Yes      | Project baseline start date              |
 
 The composite key `project_id` + `time_period` must be unique.
 
