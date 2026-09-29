@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Project specific
+# ---------------------------------------------------------------------------
+# Kaggle API credentials - never commit these.
+kaggle.json
+.kaggle/
+
+# Generated research evidence (regenerate with: python run_pipeline.py)
+# results/ is intentionally tracked so the figures stay reviewable.
+
+# Local scratch files
+temp_upload.*
+*_result.txt
