@@ -1,0 +1,14 @@
+row_index,anomaly_name,category,field,anomaly_type,detected_by_engine
+6,actual_date_before_baseline,logical_anomalies,multiple,logical_anomaly,True
+15,missing_actual_cost,missing_values,actual_cost,missing_value,True
+31,missing_pmb_budget,missing_values,pmb_budget,missing_value,True
+45,missing_project_id,missing_values,project_id,missing_value,True
+52,negative_actual_cost,bounds_violations,actual_cost,bounds_violation,True
+53,negative_pmb_budget,bounds_violations,pmb_budget,bounds_violation,True
+62,progress_above_100,bounds_violations,progress_pct,bounds_violation,True
+71,type_error_actual_cost,type_errors,actual_cost,type_error,True
+73,type_error_progress_pct,type_errors,progress_pct,type_error,True
+10,negative_period_movement,logical_anomalies,multiple,logical_anomaly,True
+25,spend_ahead_of_progress,logical_anomalies,multiple,logical_anomaly,True
+28,duplicate_record,duplicates,"project_id, time_period",duplicate,True
+76,duplicate_record,duplicates,"project_id, time_period",duplicate,True
