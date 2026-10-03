@@ -63,6 +63,26 @@ def test_readme_points_at_the_generated_report():
     assert "results/RESULTS.md" in readme
 
 
+def test_readme_and_report_agree_on_measured_figures():
+    """Both documents must quote the same numbers.
+
+    They are rendered from one cached measurement for exactly this reason: an
+    earlier revision had the README claiming a batch time the report contradicted,
+    because each timed the run separately.
+    """
+    from dqd.reporting.report import build_readme, build_report, measure
+
+    readme, report = build_readme(), build_report()
+    _, _, _ = measure()  # populate the shared cache before comparing
+
+    batch = f"{measure()[0].performance['batch_seconds']:.2f} s"
+    assert batch in readme, f"README is missing the batch time {batch}"
+    assert batch in report, f"report is missing the batch time {batch}"
+
+    for marker in ("Raw records (WBS x month)", "Distinct WBS codes", "Periods"):
+        assert marker in readme and marker in report
+
+
 def test_declared_dependencies_are_all_imported():
     """requirements.txt must not list unused runtime packages.
 
