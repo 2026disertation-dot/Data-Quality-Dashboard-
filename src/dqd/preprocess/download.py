@@ -20,7 +20,7 @@ This module resolves the dataset (downloading it with ``kagglehub`` when it is
 not already cached, or accepting a local directory), selects the eight
 financial workbooks and reads their EVM time-phase into a tidy long-format
 DataFrame.  All business logic that turns those cumulative figures into the
-dashboard's data contract lives in ``clean_kaggle_data.py``.
+dashboard's data contract lives in ``dqd/preprocess/clean.py``.
 
 Output columns (one row per project x month x WBS code)::
 
@@ -29,9 +29,9 @@ Output columns (one row per project x month x WBS code)::
 
 Usage::
 
-    python download_kaggle_data.py
-    python download_kaggle_data.py --output data/kaggle_original_data.csv
-    python download_kaggle_data.py --local-dir C:/some/where/the/files/are
+    python -m dqd.preprocess.download
+    python -m dqd.preprocess.download --output data/kaggle_original_data.csv
+    python -m dqd.preprocess.download --local-dir C:/some/where/the/files/are
 """
 
 import argparse
@@ -530,7 +530,7 @@ def download_and_format_dataset(dataset=DEFAULT_DATASET, local_dir=None, output=
             os.makedirs(output_dir, exist_ok=True)
         combined.to_csv(output, index=False)
         print(f"Saved cumulative source data to {output}")
-        print("Next: python clean_kaggle_data.py")
+        print("Next: python -m dqd.preprocess.clean")
 
     return combined
 

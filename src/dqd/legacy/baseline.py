@@ -45,9 +45,9 @@ import time
 import numpy as np
 import pandas as pd
 
-import data_fixtures
-from data_fixtures import ground_truth_keys, load_fixtures
-from validation_engine import ValidationEngine
+import dqd.legacy.fixtures as data_fixtures
+from dqd.legacy.fixtures import ground_truth_keys, load_fixtures
+from dqd.legacy.engine import ValidationEngine
 
 # Where the comparison table is written
 DEFAULT_REPORT = os.path.join("results", "comparative_results.md")

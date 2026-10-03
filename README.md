@@ -11,8 +11,32 @@ code.
 pip install -r requirements.txt
 python -m pytest -q                      # test suite
 python -m dqd.reporting.report           # regenerate this file + RESULTS.md
+python -m dqd.preprocess.download        # fetch the Kaggle dataset
+python -m dqd.preprocess.clean           # build data/*.csv
+python -m dqd.reporting.run_pipeline     # full evidence chain
 streamlit run app.py                     # dashboard
 ```
+
+## Layout
+
+One package, `src/dqd`, grouped by what each part is *for*:
+
+```
+src/dqd/
+  contracts/   the two data contracts (raw 10-field, derived 8-field)
+  engine/      rules R1-R14 and the single shared Validator
+  pipeline/    batch and incremental orchestration, dimension scoring
+  api/         Flask service (200 accepted / 202 quarantined / 422 rejected)
+  fixtures/    controlled defect injection into real records
+  preprocess/  download and clean, producing data/*.csv
+  reporting/   evaluation, document generation, figures, pipeline runner
+  legacy/      the superseded single-tier implementation, kept as baseline
+app.py         Streamlit dashboard, the only Python file at the repository root
+```
+
+`legacy/` is retained deliberately: the results chapter measures the old
+single-tier engine against the new one, so it is evidence rather than dead code.
+Nothing outside `legacy/` and the tests imports from it.
 
 ## Dataset
 
@@ -33,7 +57,7 @@ Real data downloaded from Kaggle. Nothing is synthesised.
 | Detection completeness | **99.6%** (249/250) | >= 95% | Pass |
 | False positives | **0.00%** (0/500) | <= 5% | Pass |
 | Batch/incremental consistency | **100%** (500 records) | 100% | Pass |
-| Batch validation, 2,727 rows | **4.09 s** | < 5 s | Pass |
+| Batch validation, 2,727 rows | **6.55 s** | < 5 s | Not met |
 
 > Timing is machine-dependent: the same code measures ~2 s idle and ~6 s under
 > parallel test load. The figure above is whatever the run that generated this
@@ -86,17 +110,7 @@ series context R9 depends on - stays intact.
 
 Overall: **99.84%** raw, **95.53%** derived. The tiers differ for a real reason: the same 17 defects weigh far heavier across 76 derived rows than across 2,727 raw rows.
 
-## Architecture
-
-```
-src/dqd/
-  contracts/    raw.py (10 fields), derived.py (8 fields)
-  engine/       R1-R14 record and cross-record rules, one Validator
-  pipeline/     runner.py (batch + incremental), quality.py (scoring)
-  api/          server.py - Flask, Table 4.3 status semantics
-  fixtures/     builder.py - defect injection into real records
-  reporting/    evaluation.py + report.py - all measured figures
-```
+## Design
 
 Both tiers share one `Validator`, so batch, incremental and API paths cannot
 disagree. Dual-mode consistency is structural, not a convention.

@@ -15,9 +15,8 @@ import os
 from typing import Optional
 
 # Import our custom modules
-from data_pipeline import DataPipeline
-from data_contract import get_contract_specification
-from validation_engine import ValidationEngine
+from dqd.legacy.pipeline import DataPipeline
+from dqd.legacy.contract import get_contract_specification
 
 
 

@@ -13,7 +13,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from validation_engine import ValidationEngine, _cumulative_by_project
+from dqd.legacy.engine import ValidationEngine, _cumulative_by_project
 
 
 class TestValidationEngine:

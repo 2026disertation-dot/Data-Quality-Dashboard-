@@ -22,18 +22,18 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data_contract import get_contract_specification
-from data_fixtures import load_fixtures
-from generate_figures import (build_all_figures, figure_dimension_scores,
+from dqd.legacy.contract import get_contract_specification
+from dqd.legacy.fixtures import load_fixtures
+from dqd.reporting.figures import (build_all_figures, figure_dimension_scores,
                               figure_planned_vs_actual, figure_pipeline_workflow)
-from profiling import (ANOMALY_CATEGORY_ORDER, anomaly_category_table,
+from dqd.legacy.profiling import (ANOMALY_CATEGORY_ORDER, anomaly_category_table,
                        duplicate_key_counts, format_conflict_counts,
                        load_cleaned_data, profile_frame, project_summary,
                        summary_statistics_table, to_markdown)
-from spreadsheet_baseline import (build_comparison_table, column_aggregate_findings,
+from dqd.legacy.baseline import (build_comparison_table, column_aggregate_findings,
                                   run_spreadsheet_checks, score_engine,
                                   score_findings)
-from validation_engine import ValidationEngine
+from dqd.legacy.engine import ValidationEngine
 
 
 @pytest.fixture(scope="module")
@@ -184,7 +184,7 @@ class TestFigures:
     """The figure set must render from the real data."""
 
     def test_dimension_figure_contains_one_bar_per_dimension(self, real_data):
-        from data_pipeline import DataPipeline
+        from dqd.legacy.pipeline import DataPipeline
 
         metrics = DataPipeline().process_batch(real_data)["quality_metrics"]
         figure = figure_dimension_scores(metrics)
@@ -204,7 +204,7 @@ class TestFigures:
 
     def test_figures_are_written_to_disk(self, real_data, real_fixtures, tmp_path):
         """The whole set exports without raising, proving it is complete."""
-        from run_pipeline import (DETECTION_COMPLETENESS_TARGET,
+        from dqd.reporting.run_pipeline import (DETECTION_COMPLETENESS_TARGET,
                                   FALSE_POSITIVE_TARGET,
                                   PERFORMANCE_TARGET_SECONDS, measure)
 

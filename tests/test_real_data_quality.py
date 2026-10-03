@@ -27,8 +27,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data_contract import validate_data_contract
-from data_fixtures import (
+from dqd.legacy.contract import validate_data_contract
+from dqd.legacy.fixtures import (
     DEFAULT_CLEANED,
     count_by_category,
     detected_keys,
@@ -40,8 +40,8 @@ from data_fixtures import (
     score_false_positives,
     split_batch_incremental,
 )
-from data_pipeline import DataPipeline
-from validation_engine import ValidationEngine
+from dqd.legacy.pipeline import DataPipeline
+from dqd.legacy.engine import ValidationEngine
 
 # Targets stated in the research evaluation (Chapter 3.7)
 DETECTION_COMPLETENESS_TARGET = 95.0
@@ -49,7 +49,7 @@ PERFORMANCE_TARGET_SECONDS = 5.0
 
 pytestmark = pytest.mark.skipif(
     not os.path.exists(DEFAULT_CLEANED),
-    reason="cleaned Kaggle dataset not present; run clean_kaggle_data.py first",
+    reason="cleaned Kaggle dataset not present; run clean.py first",
 )
 
 

@@ -13,7 +13,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data_contract import validate_data_contract, get_contract_specification, CostRecordSchema
+from dqd.legacy.contract import validate_data_contract, get_contract_specification, CostRecordSchema
 
 
 class TestDataContract:

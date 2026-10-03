@@ -30,9 +30,9 @@ import os
 
 import pandas as pd
 
-from data_contract import get_contract_specification
+from dqd.legacy.contract import get_contract_specification
 
-# Real, cleaned dataset produced by clean_kaggle_data.py
+# Real, cleaned dataset produced by dqd/preprocess/clean.py
 DEFAULT_CLEANED = os.path.join("data", "kaggle_cleaned_data.csv")
 
 # Where the profiling tables are written for the write-up
@@ -507,7 +507,7 @@ def main():
     if df is None:
         return 1
 
-    from validation_engine import ValidationEngine
+    from dqd.legacy.engine import ValidationEngine
 
     results = ValidationEngine().validate_batch(df)
     write_report(df, results, path=args.report or None, source=args.cleaned)

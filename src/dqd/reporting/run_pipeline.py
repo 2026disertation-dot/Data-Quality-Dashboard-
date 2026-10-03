@@ -5,7 +5,7 @@ The project now rests on the real Kaggle Project Portfolio data, so the chain
 that matters is:
 
 1. ``download_kaggle_data.py`` - fetch the dataset and extract its EVM time-phase
-2. ``clean_kaggle_data.py``    - convert the cumulative snapshots to the contract
+2. ``dqd/preprocess/clean.py``    - convert the cumulative snapshots to the contract
 3. ``data_fixtures.py``        - derive the batch/incremental/anomaly test sets
 4. this script                 - measure the system and write the results report
 
@@ -18,9 +18,9 @@ straight into the results chapter rather than being retyped by hand.
 
 Usage::
 
-    python run_pipeline.py                 # full chain, refreshing the data
-    python run_pipeline.py --skip-download # reuse the cached Kaggle download
-    python run_pipeline.py --skip-tests    # do not run the pytest suite
+    python -m dqd.reporting.run_pipeline                 # full chain, refreshing the data
+    python -m dqd.reporting.run_pipeline --skip-download # reuse the cached Kaggle download
+    python -m dqd.reporting.run_pipeline --skip-tests    # do not run the pytest suite
 """
 
 import argparse
@@ -31,9 +31,9 @@ import time
 
 import pandas as pd
 
-import data_fixtures
-from clean_kaggle_data import clean_and_transform_kaggle_data
-from data_fixtures import (
+import dqd.legacy.fixtures as data_fixtures
+from dqd.preprocess.clean import clean_and_transform_kaggle_data
+from dqd.legacy.fixtures import (
     build_fixtures,
     count_by_category,
     detected_keys,
@@ -41,8 +41,8 @@ from data_fixtures import (
     score_detection,
     score_false_positives,
 )
-from data_pipeline import DataPipeline
-from validation_engine import ValidationEngine
+from dqd.legacy.pipeline import DataPipeline
+from dqd.legacy.engine import ValidationEngine
 
 # Where the generated results report is written
 DEFAULT_REPORT = os.path.join("results", "system_testing_results.md")
@@ -370,11 +370,11 @@ def main():
     print(report)
 
     _banner(6, "Profile the real data")
-    from profiling import write_report as write_profiling_report
+    from dqd.legacy.profiling import write_report as write_profiling_report
     write_profiling_report(cleaned, evidence["clean_results"])
 
     _banner(7, "Compare against spreadsheet-based quality checks")
-    import spreadsheet_baseline
+    import dqd.legacy.baseline as spreadsheet_baseline
     sheet_findings, sheet_seconds = spreadsheet_baseline.run_spreadsheet_checks(
         fixtures["anomaly_set"])
     sheet_scores = spreadsheet_baseline.score_findings(sheet_findings,
@@ -391,7 +391,7 @@ def main():
     print(f"Wrote {comparison_path}")
 
     _banner(8, "Generate the research figure set")
-    from generate_figures import build_all_figures
+    from dqd.reporting.figures import build_all_figures
     build_all_figures(cleaned, fixtures, evidence, {
         "detection_completeness": DETECTION_COMPLETENESS_TARGET,
         "false_positive": FALSE_POSITIVE_TARGET,

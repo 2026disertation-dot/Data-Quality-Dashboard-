@@ -24,7 +24,7 @@ across 8 projects and 14 reporting periods.
 
 Non-negotiables for the derived transform
 ------------------------------------------
-``clean_kaggle_data.py`` de-cumulativises the raw series by differencing
+``dqd/preprocess/clean.py`` de-cumulativises the raw series by differencing
 consecutive snapshots.  A falling snapshot therefore becomes a *negative period
 movement*, which would make every downstream non-negativity rule fire.  The
 cleaning stage floors such movements at zero and reports the count; this module

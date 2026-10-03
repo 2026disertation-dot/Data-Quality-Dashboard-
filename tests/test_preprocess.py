@@ -17,8 +17,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data_contract import validate_data_contract
-from clean_kaggle_data import (
+from dqd.legacy.contract import validate_data_contract
+from dqd.preprocess.clean import (
     CONTRACT_COLUMNS,
     build_project_totals,
     clean_and_transform_kaggle_data,
@@ -26,7 +26,7 @@ from clean_kaggle_data import (
     load_source,
     transform_to_contract,
 )
-from download_kaggle_data import (
+from dqd.preprocess.download import (
     FINANCE_SHEET,
     SCHEDULE_ONLY_PREFIX,
     coerce_date,
@@ -443,7 +443,7 @@ class TestCleaningPipeline:
     """The download -> clean chain, driven from a fixture dataset."""
 
     def test_pipeline_produces_contract_ready_csv(self, evm_dataset_dir, tmp_path):
-        import download_kaggle_data
+        import dqd.preprocess.download as download_kaggle_data
 
         source = str(tmp_path / "kaggle_original_data.csv")
         cleaned_path = str(tmp_path / "kaggle_cleaned_data.csv")
