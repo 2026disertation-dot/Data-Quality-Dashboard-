@@ -1,29 +1,47 @@
-"""
-Pytest configuration for system testing
-"""
+"""Shared pytest fixtures and path setup."""
 
-import pytest
 import sys
-import os
+from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import pandas as pd
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+DATA = ROOT / "data"
 
 
 @pytest.fixture(scope="session")
-def test_data_dir():
-    """Get the test data directory"""
-    return os.path.join(os.path.dirname(__file__), 'data')
+def raw_data() -> pd.DataFrame:
+    """The real WBS-level dataset, exactly as downloaded."""
+    return pd.read_csv(DATA / "kaggle_original_data.csv")
 
 
 @pytest.fixture(scope="session")
-def project_root():
-    """Get the project root directory"""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+def derived_data() -> pd.DataFrame:
+    """The real project-level dataset produced by the cleaning stage."""
+    return pd.read_csv(DATA / "kaggle_cleaned_data.csv")
 
 
-def pytest_configure(config):
-    """Configure pytest markers"""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
-    config.addinivalue_line("markers", "integration: marks tests as integration tests")
-    config.addinivalue_line("markers", "unit: marks tests as unit tests")
+@pytest.fixture(scope="session")
+def fixtures(raw_data):
+    """Derived test sets: batch/incremental split, defects, clean sample."""
+    from dqd.fixtures.builder import build_fixtures
+
+    return build_fixtures(raw_data)
+
+
+@pytest.fixture(scope="session")
+def validator():
+    from dqd.engine.validator import Validator
+
+    return Validator()
+
+
+@pytest.fixture(scope="session")
+def evaluation(raw_data, derived_data, fixtures):
+    """The full measured evaluation, computed once per session."""
+    from dqd.reporting.evaluation import evaluate
+
+    return evaluate(raw_data, derived_data, fixtures)

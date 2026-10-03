@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Callable
 
+import functools
+
 import pandas as pd
 
 from .findings import Finding
@@ -148,8 +150,14 @@ def record_key(row: pd.Series, key_columns: list[str]) -> str:
     return "|".join(str(row.get(column, "")) for column in key_columns)
 
 
+@functools.lru_cache(maxsize=8192)
 def _readable_as_date(value) -> bool:
     """Report whether a value can be interpreted as a date.
+
+    Cached because this is called once per cell per date column and the dataset
+    holds only 14 distinct dates across 2,727 rows: without it, pandas re-runs
+    format inference on the same 14 strings thousands of times.  Only affects
+    speed, not results.
 
     Dates arrive as real Timestamps, as ISO text from CSV, or as Excel serial
     numbers from a spreadsheet.  All three describe a date.  A bare number that
