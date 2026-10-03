@@ -140,17 +140,21 @@ def rule_r9_cumulative_monotonicity(
         for column in value_columns:
             series = pd.to_numeric(ordered[column], errors="coerce")
             delta = series.diff()
+            previous_period = ordered["period_index"].shift(1)
             for position in delta.index[delta < 0]:
+                # A negative delta at position P means series[P] < series[P-1]:
+                # P is the restated record, so the finding belongs to P.  The
+                # previous period is the baseline it wrongly undercuts.
                 row = ordered.loc[position]
-                previous_value = series.shift(1).loc[position]
                 findings.append(
                     _finding(
                         "R9",
                         record_key(row, key_columns),
                         column,
-                        f"{column} falls from {previous_value:,.2f} to "
-                        f"{row[column]:,.2f} at period_index "
-                        f"{row['period_index']}",
+                        f"{column} is {row[column]:,.2f} at period_index "
+                        f"{row['period_index']}, below the "
+                        f"{series.shift(1).loc[position]:,.2f} reported at "
+                        f"period_index {previous_period.loc[position]}",
                         f"Correct the {column} restatement",
                     )
                 )

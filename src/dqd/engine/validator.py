@@ -124,6 +124,25 @@ class ValidationResult:
         }
 
 
+
+def _unreadable_dates(df: pd.DataFrame) -> dict[str, list]:
+    """Locate date cells that are present but cannot be read as a date."""
+    from .rules import _readable_as_date
+
+    bad: dict[str, list] = {}
+    for column in ("period_date", "actual_date", "baseline_start_date"):
+        if column not in df.columns:
+            continue
+        positions = [
+            int(position)
+            for position, value in df[column].items()
+            if not pd.isna(value) and not _readable_as_date(value)
+        ]
+        if positions:
+            bad[column] = positions
+    return bad
+
+
 def normalise_types(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce identifier columns to text before any rule runs.
 
@@ -142,13 +161,46 @@ def normalise_types(df: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: A copy with identifiers as strings and dates parsed.
     """
     out = df.copy()
+    # Remember which date cells were supplied but unreadable.  Coercion turns
+    # them into NaT, which R1 would then report as *missing* - misattributing a
+    # type error to a completeness rule.  Flagging them first keeps R2 honest.
+    out.attrs["unreadable_dates"] = _unreadable_dates(df)
     for column in IDENTIFIER_COLUMNS:
         if column in out.columns:
-            out[column] = out[column].astype(str)
+            # Plain astype(str) would turn None into the literal string "None",
+            # which R1 can no longer detect as missing.  Missing stays missing.
+            series = out[column]
+            out[column] = series.where(series.isna(), series.astype(str))
     for column in ("period_date", "actual_date", "baseline_start_date"):
         if column in out.columns:
             out[column] = pd.to_datetime(out[column], errors="coerce")
     return out
+
+
+def _unreadable_date_findings(
+    df: pd.DataFrame, key: list[str], expected: dict[str, str]
+) -> list[Finding]:
+    """Report date cells that were supplied but cannot be read as dates."""
+    from .rules import _readable_as_date
+
+    findings: list[Finding] = []
+    for column in expected:
+        if expected.get(column) != "datetime" or column not in df.columns:
+            continue
+        for position, value in df[column].items():
+            if pd.isna(value) or _readable_as_date(value):
+                continue
+            row = df.loc[position]
+            findings.append(
+                _finding(
+                    "R2",
+                    "|".join(str(row.get(c, "")) for c in key),
+                    column,
+                    f"Field '{column}' cannot be read as a date: {value!r}",
+                    f"Supply {column} as an ISO date",
+                )
+            )
+    return findings
 
 
 class Validator:
@@ -174,10 +226,17 @@ class Validator:
         Returns:
             ValidationResult: Counts plus every finding.
         """
-        df = normalise_types(df)
+        # Captured before coercion: an unreadable date becomes NaT afterwards,
+        # and NaT reads as *missing*, which would misattribute a type error to R1.
+        unreadable = _unreadable_date_findings(df, RAW_KEY, RAW_EXPECTED_TYPES)
+        normalised = normalise_types(df)
+
         if tier == "raw":
-            return self._validate_raw(df, existing)
-        return self._validate_derived(df, existing)
+            result = self._validate_raw(normalised, existing)
+        else:
+            result = self._validate_derived(normalised, existing)
+        result.findings.extend(unreadable)
+        return result
 
     # -- shared helpers ---------------------------------------------------
 

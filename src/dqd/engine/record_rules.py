@@ -90,9 +90,14 @@ def rule_r3_period_index(df: pd.DataFrame, key_columns: list[str]) -> list[Findi
         return findings
     for _, row in df.iterrows():
         value = row["period_index"]
-        if pd.isna(value) or value < 1:
-            if pd.isna(value):
-                continue
+        # A non-numeric value is R2's problem.  Comparing it here would raise
+        # TypeError and take the whole submission down with it, so a malformed
+        # field must never reach an arithmetic comparison.
+        if pd.isna(value) or isinstance(value, bool):
+            continue
+        if not isinstance(value, (int, float)):
+            continue
+        if value < 1:
             findings.append(
                 _finding(
                     "R3",
