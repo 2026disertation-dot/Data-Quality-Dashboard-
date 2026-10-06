@@ -17,9 +17,9 @@ Why two contracts
 -----------------
 The system validates two related but distinct shapes of record:
 
-* the **raw** WBS-level record, governed by :mod:`dqd.contracts.raw`
+* the **raw** WBS-level record, governed by :mod:`data_quality.contracts.raw`
 * the **derived** project-level time-phased record, governed by
-  :mod:`dqd.contracts.derived`
+  :mod:`data_quality.contracts.derived`
 
 Both are enforced by the same rule engine, so a rule behaves identically in
 batch mode, incremental mode and through the live API regardless of tier.
@@ -44,7 +44,7 @@ def raw_schema(strict: bool = True) -> pa.DataFrameSchema:
     Type and range constraints are enforced declaratively by pandera.  Rules
     that require comparing a record against its neighbours (R6, R7, R9, R11)
     cannot be expressed as a per-column check and are enforced by the rule
-    engine in :mod:`dqd.engine.rules`.
+    engine in :mod:`data_quality.engine.rules`.
 
     Args:
         strict: When True the schema rejects any unexpected extra column.

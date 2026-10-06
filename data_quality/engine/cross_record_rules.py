@@ -296,6 +296,15 @@ def rule_r10_date_window(
     data under validation, so the rule needs no external calendar.  Only dates
     *beyond* the window are flagged; an early date legitimately occurs because a
     baseline start date precedes the first reporting period.
+
+    The window is the latest date the *other* rows of the series report at this
+    period or a later one: a date later than every subsequent report has no
+    corroboration and is therefore a candidate mistyping.  The comparison is
+    deliberately leave-one-out - an earlier version compared each date with the
+    maximum of its own group, which the date itself necessarily helped define,
+    so the rule could never fire on any input.  A series' final period has no
+    later observation to judge it against and so defines the window rather than
+    being tested against it.
     """
     findings: list[Finding] = []
     needed = set(group_columns) | {"period_date", "period_index"}
@@ -305,12 +314,19 @@ def rule_r10_date_window(
     for _, group in df.groupby(present):
         ordered = group.sort_values("period_index")
         dates = pd.to_datetime(ordered["period_date"], errors="coerce")
-        if dates.isna().all():
-            continue
-        upper = dates.max()
-        for _, row in ordered.iterrows():
-            date = pd.to_datetime(row["period_date"], errors="coerce")
-            if pd.notna(date) and pd.notna(upper) and date > upper:
+        periods = ordered["period_index"].tolist()
+        count = len(ordered)
+        for i in range(count):
+            date = dates.iloc[i]
+            if pd.isna(date):
+                continue
+            peers = [
+                dates.iloc[j]
+                for j in range(count)
+                if j != i and periods[j] >= periods[i] and pd.notna(dates.iloc[j])
+            ]
+            if peers and date > max(peers):
+                row = ordered.iloc[i]
                 findings.append(
                     _finding(
                         "R10",

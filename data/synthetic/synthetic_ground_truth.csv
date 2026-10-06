@@ -1,0 +1,20 @@
+defect_id,tier,record_key,rule_id,field,anomaly_type
+S001,raw,P02|9101|2,R9,ev_cum,cumulative_restatement
+S002,raw,P03|9201|2,R10,period_date,date_beyond_window
+S003,raw,P03|9201|3,R8,period_date,date_out_of_order
+S004,raw,P04|9301|2,R6,project_name,inconsistent_project_name
+S005,raw,P05|9401|2,R7,wbs_description,inconsistent_wbs_description
+S006,raw,P05|9401|3,R12,wbs_description,missing_wbs_description
+S007,raw,P06|9501|2,R4,ac_cum,out_of_bounds_value
+S008,raw,P06|9501|3,R1,project_name,missing_required_field
+S009,raw,P06|9501|1,R5,"project_id, wbs_code, period_index",duplicate_key
+S010,raw,P07|9601|0,R3,period_index,out_of_bounds_value
+S011,raw,P07|9601|1,R2,period_date,unexpected_data_type
+S012,raw,P08|9701|1,R11,source_file,source_file_mismatch
+S013,derived,P02|Month-2,R13,actual_cost,budget_overrun
+S014,derived,P02|Month-3,R13,actual_cost,budget_overrun
+S015,derived,P02|Month-2,R14,progress_pct,progress_mismatch
+S016,derived,P02|Month-3,R14,progress_pct,progress_mismatch
+S017,derived,P03|Month-1,R14,progress_pct,progress_mismatch
+S018,derived,P03|Month-2,R14,progress_pct,progress_mismatch
+S019,derived,P04|Month-1,R8,actual_date,baseline_date_violation

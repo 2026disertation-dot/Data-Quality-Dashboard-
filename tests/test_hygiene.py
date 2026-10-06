@@ -44,7 +44,7 @@ def test_figures_are_not_duplicated():
 def test_source_files_have_no_byte_order_mark():
     """A UTF-8 BOM makes a module unimportable by ``ast.parse``."""
     offenders = []
-    for path in list(ROOT.glob("*.py")) + list((ROOT / "src").rglob("*.py")):
+    for path in list(ROOT.glob("*.py")) + list(ROOT.rglob("*.py")):
         if path.read_bytes().startswith(b"\xef\xbb\xbf"):
             offenders.append(path.name)
     assert not offenders, f"BOM found in: {offenders}"
@@ -59,7 +59,7 @@ def test_no_credentials_are_tracked():
 def test_readme_points_at_the_generated_report():
     """The README must not restate numbers the generator owns."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "dqd.reporting.report" in readme
+    assert "data_quality.reporting.report" in readme
     assert "results/RESULTS.md" in readme
 
 
@@ -70,7 +70,7 @@ def test_readme_and_report_agree_on_measured_figures():
     earlier revision had the README claiming a batch time the report contradicted,
     because each timed the run separately.
     """
-    from dqd.reporting.report import build_readme, build_report, measure
+    from data_quality.reporting.report import build_readme, build_report, measure
 
     readme, report = build_readme(), build_report()
     _, _, _ = measure()  # populate the shared cache before comparing
@@ -103,10 +103,11 @@ def test_declared_dependencies_are_all_imported():
     assert declared, "nothing left to check"
     sources = "\n".join(
         p.read_text(encoding="utf-8", errors="ignore")
-        for p in list(ROOT.glob("*.py")) + list((ROOT / "src").rglob("*.py"))
+        for p in list(ROOT.glob("*.py")) + list(ROOT.rglob("*.py"))
     )
     for package in declared:
         module = package.replace("-", "_")
         # Both spellings occur: ``import pandas`` and ``from flask import Flask``.
         used = f"import {module}" in sources or f"from {module}" in sources
         assert used, f"{package} is declared but unused"
+

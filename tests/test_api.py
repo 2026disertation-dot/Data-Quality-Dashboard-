@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from dqd.api.server import create_app
+from data_quality.api.server import create_app
 
 
 @pytest.fixture()

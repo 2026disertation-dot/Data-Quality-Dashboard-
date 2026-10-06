@@ -8,7 +8,7 @@ subtracted four times and ``valid_records`` went negative.
 import pandas as pd
 import pytest
 
-from dqd.engine.validator import Validator
+from data_quality.engine.validator import Validator
 
 
 def test_counts_reconcile_on_real_raw_data(validator, raw_data):
@@ -57,7 +57,7 @@ def test_r9_is_the_only_rule_firing_on_clean_real_data(validator, raw_data):
 
 def test_wbs_code_keeps_leading_zeros(validator):
     """A WBS code written 011 must not collapse to 11."""
-    from dqd.engine.validator import normalise_types
+    from data_quality.engine.validator import normalise_types
 
     frame = pd.DataFrame({"wbs_code": [11, "011"]})
     normalised = normalise_types(frame)
@@ -66,7 +66,7 @@ def test_wbs_code_keeps_leading_zeros(validator):
 
 def test_missing_value_stays_missing(validator):
     """None must not become the literal string "None"."""
-    from dqd.engine.validator import normalise_types
+    from data_quality.engine.validator import normalise_types
 
     frame = pd.DataFrame({"project_name": [None, "Real"]})
     normalised = normalise_types(frame)
@@ -108,7 +108,7 @@ def test_r9_detects_a_restatement(validator, raw_data):
 
 def test_incremental_matches_batch_for_same_records(fixtures):
     """Dual-mode consistency: identical flags in both modes."""
-    from dqd.pipeline.runner import DataPipeline
+    from data_quality.pipeline.runner import DataPipeline
 
     batch = DataPipeline().process_batch(fixtures.regression, tier="raw")
     incremental = DataPipeline().process_incremental(fixtures.regression, tier="raw")

@@ -363,23 +363,12 @@ class Validator:
             self._r9_with_context(df, existing, key, ["project_id"], money)
         )
 
-        # R13 and R14 read cumulative running totals, so they are evaluated over
-        # the new records stacked on any prior history: a period only breaches a
-        # cumulative limit once earlier periods are counted.
-        combined = df if existing is None or len(existing) == 0 else pd.concat(
-            [existing, df], ignore_index=True
-        )
-        result.findings.extend(rule_r13_budget_overrun(combined, key))
-        result.findings.extend(rule_r14_progress_mismatch(combined, key))
-
-        # Report only findings that land on rows the caller submitted.
-        if combined is not df:
-            new_keys = {
-                "|".join(str(v) for v in row)
-                for row in df[key].itertuples(index=False, name=None)
-            }
-            result.findings = [f for f in result.findings if f.record_key in new_keys]
-
+        # R13 and R14 were previously *also* run directly here, on top of
+        # _cumulative_with_context above, so every R13/R14 finding was
+        # reported twice - the real dataset showed 34 events for 17 flagged
+        # records.  The context helper is the single evaluation point: it
+        # stacks prior history when there is any and keeps only findings that
+        # land on the rows the caller submitted.
         return result
 
     @staticmethod

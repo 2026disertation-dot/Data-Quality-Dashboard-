@@ -33,9 +33,9 @@ import os
 import numpy as np
 import pandas as pd
 
-from dqd.legacy.contract import get_contract_specification
+from data_quality.legacy.contract import get_contract_specification
 
-# Real, cleaned dataset produced by dqd/preprocess/clean.py
+# Real, cleaned dataset produced by data_quality/preprocess/clean.py
 DEFAULT_CLEANED = os.path.join("data", "kaggle_cleaned_data.csv")
 
 # Derived fixtures
@@ -483,7 +483,7 @@ def main():
     if build_fixtures(cleaned_path=args.cleaned, holdout=args.holdout,
                       seed=args.seed) is None:
         return 1
-    print("\nNext: python -m dqd.reporting.run_pipeline   (runs the full evidence chain)")
+    print("\nNext: python -m data_quality.reporting.run_pipeline   (runs the full evidence chain)")
     return 0
 
 

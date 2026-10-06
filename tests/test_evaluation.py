@@ -1,7 +1,7 @@
 """Measured evaluation must match the targets the research sets.
 
 Every assertion here is on a *measured* value produced by
-:func:`dqd.reporting.evaluation.evaluate`.  If a figure is wrong the test fails;
+:func:`data_quality.reporting.evaluation.evaluate`.  If a figure is wrong the test fails;
 nothing here restates a number that was typed in by hand.
 """
 

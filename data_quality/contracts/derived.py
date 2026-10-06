@@ -1,7 +1,7 @@
 """
 Derived project-level data contract.
 
-The raw WBS-level contract in :mod:`dqd.contracts.raw` governs what the source
+The raw WBS-level contract in :mod:`data_quality.contracts.raw` governs what the source
 workbooks contain.  This contract governs the *time-phased project record* that
 the cleaning stage produces, which is the shape the dashboard reasons about.
 
@@ -24,7 +24,7 @@ across 8 projects and 14 reporting periods.
 
 Non-negotiables for the derived transform
 ------------------------------------------
-``dqd/preprocess/clean.py`` de-cumulativises the raw series by differencing
+``data_quality/preprocess/clean.py`` de-cumulativises the raw series by differencing
 consecutive snapshots.  A falling snapshot therefore becomes a *negative period
 movement*, which would make every downstream non-negativity rule fire.  The
 cleaning stage floors such movements at zero and reports the count; this module

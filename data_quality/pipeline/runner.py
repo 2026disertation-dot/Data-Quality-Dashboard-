@@ -2,7 +2,7 @@
 The pipeline: batch and incremental modes over one validator.
 
 Dual-mode consistency is enforced structurally rather than by convention.
-:class:`DataPipeline` holds a single :class:`~dqd.engine.validator.Validator`
+:class:`DataPipeline` holds a single :class:`~data_quality.engine.validator.Validator`
 instance and every mode routes through it, so a record cannot be accepted in one
 mode and rejected in another.  The regression test in
 ``tests/test_dual_mode.py`` asserts this rather than assuming it.

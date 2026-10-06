@@ -29,8 +29,8 @@ simulated: the previous version of this script filled unparsable projects with
 
 Usage::
 
-    python -m dqd.preprocess.clean
-    python -m dqd.preprocess.clean --source data/kaggle_original_data.csv \\
+    python -m data_quality.preprocess.clean
+    python -m data_quality.preprocess.clean --source data/kaggle_original_data.csv \\
                                 --output data/kaggle_cleaned_data.csv
 """
 
@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from dqd.legacy.contract import validate_data_contract
+from data_quality.legacy.contract import validate_data_contract
 
 # Default input: the cumulative EVM data written by download_kaggle_data.py
 DEFAULT_SOURCE = os.path.join("data", "kaggle_original_data.csv")
@@ -48,7 +48,7 @@ DEFAULT_SOURCE = os.path.join("data", "kaggle_original_data.csv")
 # Default output: dashboard-ready, contract compliant data
 DEFAULT_OUTPUT = os.path.join("data", "kaggle_cleaned_data.csv")
 
-# Column order required by the data contract (see dqd/legacy/contract.py)
+# Column order required by the data contract (see data_quality/legacy/contract.py)
 CONTRACT_COLUMNS = [
     "project_id",
     "time_period",
@@ -277,7 +277,7 @@ def load_source(path=DEFAULT_SOURCE):
     if not os.path.exists(path):
         print(f"Source file {path} not found - downloading and extracting first...")
         try:
-            from dqd.preprocess.download import download_and_format_dataset
+            from data_quality.preprocess.download import download_and_format_dataset
         except ImportError:
             print("ERROR: download_kaggle_data.py is not importable from this directory.")
             return None

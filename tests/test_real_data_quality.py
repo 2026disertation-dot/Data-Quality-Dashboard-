@@ -27,8 +27,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from dqd.legacy.contract import validate_data_contract
-from dqd.legacy.fixtures import (
+from data_quality.legacy.contract import validate_data_contract
+from data_quality.legacy.fixtures import (
     DEFAULT_CLEANED,
     count_by_category,
     detected_keys,
@@ -40,8 +40,8 @@ from dqd.legacy.fixtures import (
     score_false_positives,
     split_batch_incremental,
 )
-from dqd.legacy.pipeline import DataPipeline
-from dqd.legacy.engine import ValidationEngine
+from data_quality.legacy.pipeline import DataPipeline
+from data_quality.legacy.engine import ValidationEngine
 
 # Targets stated in the research evaluation (Chapter 3.7)
 DETECTION_COMPLETENESS_TARGET = 95.0

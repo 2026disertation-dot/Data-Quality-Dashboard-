@@ -10,8 +10,8 @@ from datetime import datetime
 import json
 import os
 
-from dqd.legacy.contract import validate_data_contract, get_contract_specification
-from dqd.legacy.engine import ValidationEngine
+from data_quality.legacy.contract import validate_data_contract, get_contract_specification
+from data_quality.legacy.engine import ValidationEngine
 
 
 class DataPipeline:

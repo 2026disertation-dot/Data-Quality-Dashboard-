@@ -14,8 +14,8 @@ chart can be embedded in the Streamlit app.
 
 Usage::
 
-    python -m dqd.reporting.figures
-    python -m dqd.reporting.figures --output results/figures
+    python -m data_quality.reporting.figures
+    python -m data_quality.reporting.figures --output results/figures
 """
 
 import argparse
@@ -25,11 +25,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-import dqd.legacy.fixtures as data_fixtures
-from dqd.legacy.fixtures import load_fixtures
-from dqd.legacy.pipeline import DataPipeline
-from dqd.legacy.profiling import load_cleaned_data, project_summary, summary_statistics_table
-from dqd.legacy.engine import ValidationEngine
+import data_quality.legacy.fixtures as data_fixtures
+from data_quality.legacy.fixtures import load_fixtures
+from data_quality.legacy.pipeline import DataPipeline
+from data_quality.legacy.profiling import load_cleaned_data, project_summary, summary_statistics_table
+from data_quality.legacy.engine import ValidationEngine
 
 # Where the PNGs are written
 DEFAULT_OUTPUT_DIR = os.path.join("results", "figures")
@@ -598,7 +598,7 @@ def main():
     if cleaned is None or fixtures is None:
         return 1
 
-    from dqd.reporting.run_pipeline import (DETECTION_COMPLETENESS_TARGET,
+    from data_quality.reporting.run_pipeline import (DETECTION_COMPLETENESS_TARGET,
                              PERFORMANCE_TARGET_SECONDS, measure)
 
     targets = {
