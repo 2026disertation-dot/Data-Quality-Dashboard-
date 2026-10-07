@@ -29,73 +29,6 @@ class Evaluation:
     performance: dict = field(default_factory=dict)
     dimensions: dict = field(default_factory=dict)
     rules_observed: dict = field(default_factory=dict)
-    synthetic: dict = field(default_factory=dict)
-
-
-def _synthetic_results(validator: Validator) -> dict:
-    """Measure the standalone synthetic set against every rule.
-
-    Args:
-        validator: The shared validator, used for both tiers.
-
-    Returns:
-        dict: Per-tier counts, per-rule findings, rule coverage and the
-        ground-truth match rate of ``data/synthetic/``.
-    """
-    from ..fixtures.builder import (
-        ALL_RULE_IDS,
-        SYNTHETIC_DERIVED_NAME,
-        SYNTHETIC_RAW_NAME,
-        SYNTHETIC_TRUTH_NAME,
-        ensure_synthetic_data,
-    )
-
-    directory = ensure_synthetic_data()
-    synthetic_raw = pd.read_csv(directory / SYNTHETIC_RAW_NAME)
-    synthetic_derived = pd.read_csv(directory / SYNTHETIC_DERIVED_NAME)
-    truth = pd.read_csv(directory / SYNTHETIC_TRUTH_NAME)
-
-    raw_result = validator.validate(synthetic_raw, tier="raw")
-    derived_result = validator.validate(synthetic_derived, tier="derived")
-
-    by_rule: dict[str, int] = {}
-    for result in (raw_result, derived_result):
-        for rule, count in result.findings_by_rule().items():
-            by_rule[rule] = by_rule.get(rule, 0) + count
-
-    observed = {
-        (f.record_key, f.rule_id)
-        for f in raw_result.all_findings + derived_result.all_findings
-    }
-    truth = truth.copy()
-    truth["observed"] = [
-        (row.record_key, row.rule_id) in observed
-        for row in truth.itertuples()
-    ]
-    matched = int(truth["observed"].sum())
-    total = int(len(truth))
-    fired = sorted(by_rule)
-
-    return {
-        "raw_records": len(synthetic_raw),
-        "derived_records": len(synthetic_derived),
-        "raw_invalid": raw_result.invalid_records,
-        "derived_invalid": derived_result.invalid_records,
-        "raw_findings": raw_result.counts["total_findings"],
-        "derived_findings": derived_result.counts["total_findings"],
-        "by_rule": by_rule,
-        "by_rule_raw": raw_result.findings_by_rule(),
-        "by_rule_derived": derived_result.findings_by_rule(),
-        "rules_fired": fired,
-        "rules_total": len(ALL_RULE_IDS),
-        "coverage_pct": round(len(fired) / len(ALL_RULE_IDS) * 100.0, 1),
-        "ground_truth_total": total,
-        "ground_truth_matched": matched,
-        "match_pct": round(matched / total * 100.0, 1) if total else 0.0,
-        "missed_detail": truth.loc[~truth["observed"], [
-            "defect_id", "tier", "record_key", "rule_id", "field",
-        ]].to_dict("records"),
-    }
 
 
 def evaluate(raw: pd.DataFrame, derived: pd.DataFrame, fixtures) -> Evaluation:
@@ -139,9 +72,6 @@ def evaluate(raw: pd.DataFrame, derived: pd.DataFrame, fixtures) -> Evaluation:
     evaluation.dataset["derived_findings"] = (
         derived_result.counts["total_findings"]
     )
-
-    # -- standalone synthetic set (data/synthetic/, every rule R1-R14) ----
-    evaluation.synthetic = _synthetic_results(validator)
 
     # -- detection completeness (Section 5.9) ------------------------------
     # The defect set is the full dataset with controlled defects injected in

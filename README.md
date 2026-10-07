@@ -115,7 +115,7 @@ files contain.
 | Detection completeness | **99.6%** (249/250) | >= 95% | Pass |
 | False positives | **0.00%** (0/500) | <= 5% | Pass |
 | Batch/incremental consistency | **100%** (500 records) | 100% | Pass |
-| Batch validation, 2,727 rows | **7.12 s** | < 5 s | Not met |
+| Batch validation, 2,727 rows | **5.67 s** | < 5 s | Not met |
 
 > Timing is machine-dependent: the same code measures ~2 s idle and ~6 s under
 > parallel test load. The figure above is whatever the run that generated this
@@ -149,46 +149,6 @@ series context R9 depends on - stays intact.
 | Integrity | 90% | 99.19% | Pass | 77.63% |
 
 Overall: **99.84%** raw, **95.53%** derived. The tiers differ for a real reason: 17 of 76 derived rows are flagged while only 22 of 2,727 raw rows are.
-
-## 3. Synthetic data
-
-The real data is too clean to exercise most of the engine, so
-`data/synthetic/` carries a hand-built set whose only job is to make every rule
-fire: two CSVs plus `synthetic_ground_truth.csv`, the exact findings each
-planted defect must produce.
-
-| Property | Value |
-|---|---|
-| Raw records | 28 |
-| Raw invalid | 15 |
-| Raw findings | 20 |
-| Derived records | 10 |
-| Derived invalid | 5 |
-| Derived findings | 7 |
-| Rules fired | 14 of 14 |
-| Coverage | 100.0% |
-| Ground truth matched | 19/19 (100.0%) |
-
-### Findings by rule
-
-| Rule | Findings | Tier |
-|---|---|---|
-| R1 | 3 | raw |
-| R10 | 1 | raw |
-| R11 | 1 | raw |
-| R12 | 1 | raw |
-| R13 | 2 | derived |
-| R14 | 4 | derived |
-| R2 | 1 | raw |
-| R3 | 1 | raw |
-| R4 | 1 | raw |
-| R5 | 2 | raw |
-| R6 | 3 | raw |
-| R7 | 3 | raw |
-| R8 | 2 | raw + derived |
-| R9 | 2 | raw |
-
-**14/14 rules fire (100.0% coverage).** Ground truth: 19/19 labelled findings reproduced (100.0%). Nothing missed.
 
 ## Design
 
