@@ -5,6 +5,7 @@ pandera>=0.17.0
 flask>=3.0.0
 streamlit>=1.28.0
 plotly>=5.17.0
+kagglehub>=1.0.0
 
 # Tests
 pytest>=7.4.0

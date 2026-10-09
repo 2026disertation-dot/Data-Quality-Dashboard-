@@ -132,7 +132,7 @@ files contain.
 | Detection completeness | **99.6%** (249/250) | >= 95% | Pass |
 | False positives | **0.00%** (0/500) | <= 5% | Pass |
 | Batch/incremental consistency | **100%** (500 records) | 100% | Pass |
-| Batch validation, 2,727 rows | **4.73 s** | < 5 s | Pass |
+| Batch validation, 2,727 rows | **4.90 s** | < 5 s | Pass |
 
 > Timing is machine-dependent: the same code measures ~2 s idle and ~6 s under
 > parallel test load. The figure above is whatever the run that generated this

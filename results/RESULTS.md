@@ -102,8 +102,8 @@ Both modes agree on **100%** of 500 records (3 invalid in each). Both modes rout
 
 | Mode | Records | Elapsed |
 |---|---|---|
-| Batch | 2,727 | 4.73 s |
-| Incremental | 93 | 0.57 s |
+| Batch | 2,727 | 4.90 s |
+| Incremental | 93 | 0.62 s |
 
 ### Quality dimensions
 

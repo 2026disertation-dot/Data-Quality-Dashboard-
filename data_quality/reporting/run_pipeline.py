@@ -4,17 +4,20 @@ Run the whole evidence chain end to end and record the results.
 The project now rests on the real Kaggle Project Portfolio data, so the chain
 that matters is:
 
-1. ``download_kaggle_data.py`` - fetch the dataset and extract its EVM time-phase
+1. ``data_quality/preprocess/download.py`` - fetch the dataset and extract its EVM time-phase
 2. ``data_quality/preprocess/clean.py``    - convert the cumulative snapshots to the contract
-3. ``data_fixtures.py``        - derive the batch/incremental/anomaly test sets
+3. ``data_quality/legacy/fixtures.py``     - derive the batch/incremental/anomaly test sets
 4. this script                 - measure the system and write the results report
 
 Step 4 is what turns the artefacts into evidence. It measures, on real project
 cost records, the quantities the research evaluation asks for: detection
 completeness, false positives, regression consistency between batch and
 incremental mode, performance, and the data quality dimension scores. The
-figures are written to ``results/system_testing_results.md`` so they can be read
-straight into the results chapter rather than being retyped by hand.
+figures are written to ``results/pipeline/system_testing_results.md`` so they
+can be read straight into the results chapter rather than being retyped by
+hand.  They live in the ``results/pipeline/`` subfolder because
+``results/RESULTS.md`` is the single top-level report (enforced by
+``tests/test_hygiene.py``).
 
 Usage::
 
@@ -44,8 +47,9 @@ from data_quality.legacy.fixtures import (
 from data_quality.legacy.pipeline import DataPipeline
 from data_quality.legacy.engine import ValidationEngine
 
-# Where the generated results report is written
-DEFAULT_REPORT = os.path.join("results", "system_testing_results.md")
+# Where the generated results report is written.  Kept in the results/pipeline/
+# subfolder: results/RESULTS.md is the single top-level report.
+DEFAULT_REPORT = os.path.join("results", "pipeline", "system_testing_results.md")
 
 # Targets from the research evaluation (Chapter 3.7)
 DETECTION_COMPLETENESS_TARGET = 95.0
@@ -320,7 +324,7 @@ def main():
 
     if not args.skip_download:
         _banner(1, "Download the Kaggle dataset and extract its EVM time-phase")
-        if not run_step([sys.executable, "download_kaggle_data.py"]):
+        if not run_step([sys.executable, "-m", "data_quality.preprocess.download"]):
             print("Download step failed.", file=sys.stderr)
             return 1
     else:
@@ -371,7 +375,9 @@ def main():
 
     _banner(6, "Profile the real data")
     from data_quality.legacy.profiling import write_report as write_profiling_report
-    write_profiling_report(cleaned, evidence["clean_results"])
+    write_profiling_report(
+        cleaned, evidence["clean_results"],
+        path=os.path.join("results", "pipeline", "data_profiling.md"))
 
     _banner(7, "Compare against spreadsheet-based quality checks")
     import data_quality.legacy.baseline as spreadsheet_baseline
@@ -385,7 +391,8 @@ def main():
         cleaned, engine_scores, sheet_scores, evidence["anomaly_seconds"],
         sheet_seconds, evidence["anomaly_results"], sheet_findings,
         len(fixtures["anomaly_set"]))
-    comparison_path = os.path.join("results", "comparative_results.md")
+    comparison_path = os.path.join("results", "pipeline", "comparative_results.md")
+    os.makedirs(os.path.dirname(comparison_path), exist_ok=True)
     with open(comparison_path, "w", encoding="utf-8") as handle:
         handle.write(comparison)
     print(f"Wrote {comparison_path}")

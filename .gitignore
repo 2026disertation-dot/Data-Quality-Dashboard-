@@ -57,6 +57,7 @@ cover/
 
 # Django stuff:
 *.log
+*.err
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -224,8 +225,12 @@ __marimo__/
 kaggle.json
 .kaggle/
 
-# Generated research evidence (regenerate with: python run_pipeline.py)
+# Generated research evidence (regenerate with: python -m data_quality.reporting.run_pipeline)
 # results/ is intentionally tracked so the figures stay reviewable.
+# Transient pipeline outputs plus the sub-reports run_pipeline regenerates:
+data/kaggle_batch_data.csv
+data/kaggle_incremental_data.csv
+results/pipeline/
 
 # Local scratch files
 temp_upload.*
