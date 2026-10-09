@@ -43,8 +43,25 @@ API never import from it.
 
 ## 1. Original Kaggle data
 
-Real data downloaded from Kaggle into `data/kaggle_original_data.csv`.
-Nothing is synthesised.
+`data/kaggle_original_data.csv` as received, before any cleaning.
+Shape: **2,727 rows x 10 columns**. The cleaning stage later condenses these WBS-level
+series into one record per project and period, so this is the state every
+downstream figure starts from. Nothing is synthesised.
+
+### Columns (as read)
+
+| Column | Dtype (as read) | Non-null |
+|---|---|---|
+| project_id | str | 2,727 |
+| project_name | str | 2,727 |
+| source_file | str | 2,727 |
+| wbs_code | int64 | 2,727 |
+| wbs_description | str | 2,727 |
+| period_date | str | 2,727 |
+| period_index | int64 | 2,727 |
+| pv_cum | float64 | 2,727 |
+| ac_cum | float64 | 2,727 |
+| ev_cum | float64 | 2,727 |
 
 | Property | Value |
 |---|---|
@@ -115,7 +132,7 @@ files contain.
 | Detection completeness | **99.6%** (249/250) | >= 95% | Pass |
 | False positives | **0.00%** (0/500) | <= 5% | Pass |
 | Batch/incremental consistency | **100%** (500 records) | 100% | Pass |
-| Batch validation, 2,727 rows | **5.67 s** | < 5 s | Not met |
+| Batch validation, 2,727 rows | **4.73 s** | < 5 s | Pass |
 
 > Timing is machine-dependent: the same code measures ~2 s idle and ~6 s under
 > parallel test load. The figure above is whatever the run that generated this

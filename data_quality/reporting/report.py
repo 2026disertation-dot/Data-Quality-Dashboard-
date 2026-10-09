@@ -35,6 +35,47 @@ def _status(value: float, target: float) -> str:
     return "Pass" if value >= target else "Not met"
 
 
+def _shape_line(frame: pd.DataFrame) -> str:
+    """State the as-received shape of a CSV, exactly as pandas reads it.
+
+    The row count proves the analysis starts from the real file untouched:
+    2,728 lines on disk means one header plus 2,727 data rows.  The column
+    count beside it shows what the cleaning stage had to work with before it
+    condensed anything.
+
+    Args:
+        frame: The frame as read from its CSV.
+
+    Returns:
+        str: A one-line shape statement such as
+        ``2,727 rows x 10 columns``.
+    """
+    return f"{len(frame):,} rows x {frame.shape[1]} columns"
+
+
+def _columns_table(frame: pd.DataFrame) -> str:
+    """List each column with the dtype pandas inferred and its non-null count.
+
+    Dtypes matter because the cleaning stage coerces ``wbs_code`` to text and
+    parses the date columns - the table shows what the raw file actually held
+    before any of that happened.
+
+    Args:
+        frame: The frame as read from its CSV.
+
+    Returns:
+        str: A markdown table of column, dtype and non-null count.
+    """
+    return _table(
+        [
+            [str(column), str(frame[column].dtype),
+             f"{int(frame[column].notna().sum()):,}"]
+            for column in frame.columns
+        ],
+        ["Column", "Dtype (as read)", "Non-null"],
+    )
+
+
 def _preview(raw: pd.DataFrame, limit: int = 10) -> str:
     """Render the first rows of a frame as a markdown table.
 
@@ -100,6 +141,12 @@ def build_report() -> str:
 
     # ------------------------------------------------- 1. original Kaggle data
     add("## 1. Original Kaggle data\n")
+    add("`data/kaggle_original_data.csv` as received, before any cleaning. "
+        f"Shape: **{_shape_line(raw)}**. The cleaning stage later condenses "
+        "these WBS-level series into one record per project and period, so "
+        "this is the state every downstream figure starts from.\n")
+    add("### Columns (as read)\n")
+    add(_columns_table(raw) + "\n")
     add(_table(
         [
             ["Raw records (WBS x month)", f"{d['raw_records']:,}"],
@@ -264,8 +311,14 @@ API never import from it.
 
 ## 1. Original Kaggle data
 
-Real data downloaded from Kaggle into `data/kaggle_original_data.csv`.
-Nothing is synthesised.
+`data/kaggle_original_data.csv` as received, before any cleaning.
+Shape: **{raw_shape}**. The cleaning stage later condenses these WBS-level
+series into one record per project and period, so this is the state every
+downstream figure starts from. Nothing is synthesised.
+
+### Columns (as read)
+
+{raw_columns}
 
 {original_dataset}
 
@@ -391,6 +444,9 @@ def build_readme() -> str:
 
     preview = _preview(raw)
 
+    raw_shape = _shape_line(raw)
+    raw_columns = _columns_table(raw)
+
     cleaned_dataset = _table(
         [
             ["Derived records (project x period)", f"{d['derived_records']:,}"],
@@ -468,6 +524,7 @@ def build_readme() -> str:
 
     return README_TEMPLATE.format(
         original_dataset=original_dataset, preview=preview,
+        raw_shape=raw_shape, raw_columns=raw_columns,
         cleaned_dataset=cleaned_dataset,
         findings_raw=findings_raw, findings_derived=findings_derived,
         headline=headline, detection=detection, dimensions=dimensions,

@@ -30,6 +30,36 @@ def test_dataset_facts_match_the_real_files(evaluation, raw_data, derived_data):
     assert dataset["periods"] == raw_data["period_index"].nunique() == 14
 
 
+def test_raw_shape_is_reported_before_cleaning(raw_data):
+    """The research needs the as-received state shown first.
+
+    Section 1 of both documents must state the raw shape (2,727 rows x 10
+    columns) and list every column with its as-read dtype, ahead of any
+    cleaned figure.  This pins that ordering so a future edit cannot quietly
+    lead with the cleaned 76-row tier.
+    """
+    from data_quality.reporting.report import (
+        _columns_table,
+        _shape_line,
+        build_readme,
+        build_report,
+    )
+
+    assert _shape_line(raw_data) == "2,727 rows x 10 columns"
+
+    columns_table = _columns_table(raw_data)
+    for column in raw_data.columns:
+        assert str(column) in columns_table
+    assert "Dtype (as read)" in columns_table
+
+    for document in (build_readme(), build_report()):
+        raw_section = document.index("## 1. Original Kaggle data")
+        cleaned_section = document.index("## 2. Cleaned Kaggle data")
+        assert raw_section < cleaned_section
+        assert "2,727 rows x 10 columns" in document
+        assert "### Columns (as read)" in document
+
+
 def test_raw_contract_has_the_ten_specified_fields(evaluation):
     assert len(evaluation.dataset["raw_fields"]) == 10
     assert {
