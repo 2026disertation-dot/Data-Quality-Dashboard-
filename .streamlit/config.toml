@@ -15,7 +15,7 @@ baseFontSize = 15
 baseRadius = "0.5rem"
 
 # Surfaces: white cards on a faint grey canvas.
-backgroundColor = "#F5F5F7"        # Apple-style page grey
+backgroundColor = "#F5F5F7"        # page canvas
 secondaryBackgroundColor = "#FFFFFF"  # card / sidebar surface
 grayBackgroundColor = "#EFEFF1"    # subtle inset panels
 borderColor = "#D8D8DC"
@@ -35,45 +35,45 @@ baseFontWeight = 400
 metricValueFontSize = "1.65rem"
 metricValueFontWeight = 600
 
-# Accent: one system blue for links, active tabs and focus rings.
+# Accent: one blue for links, active tabs and focus rings.
 blueColor = "#007AFF"
 blueBackgroundColor = "#007AFF"
 blueTextColor = "#FFFFFF"
-linkColor = "#007AFF"
+linkColor = "#0057B8"
 
 # Semantic colours, matched to the chart palette in app.py.  Each has a text
-# variant (accessible on the light background) and a background tint.
+# variant readable on the light background.
 redColor = "#FF3B30"               # fail / out of target
-redBackgroundColor = "#FF3B30"
+redBackgroundColor = "#FFECEB"
 redTextColor = "#D70015"
 greenColor = "#34C759"             # pass / within target
-greenBackgroundColor = "#34C759"
-# White on the success green, per the Apple-style treatment.  The previous
-# value was #248A3D, i.e. a *dark* green on the #34C759 background, which read
-# as muddy rather than clean.  Note the measured contrast is 2.22:1, below the
-# WCAG AA 4.5:1 floor for normal text - this is a deliberate visual choice
-# rather than an accessible one.
-greenTextColor = "#FFFFFF"
+greenBackgroundColor = "#E7F7EC"
+# Dark green text on a pale green background.  White text on the saturated
+# #34C759 measured 2.22:1, below the WCAG AA 4.5:1 floor, so the background
+# is tinted and the text uses this accessible dark green instead.
+greenTextColor = "#1D7A34"
 orangeColor = "#FF9F0A"            # attention
-orangeBackgroundColor = "#FF9F0A"
+orangeBackgroundColor = "#FFF3DF"
 orangeTextColor = "#B25000"
 yellowColor = "#FF9F0A"
-yellowBackgroundColor = "#FF9F0A"
+yellowBackgroundColor = "#FFF3DF"
 yellowTextColor = "#B25000"
 violetColor = "#AF52DE"
-violetBackgroundColor = "#AF52DE"
+violetBackgroundColor = "#F3E8FB"
 violetTextColor = "#8944AB"
 
 # Chart palettes.  The categorical list matches SERIES_COLORS in app.py so the
 # interactive charts and the exported figures use the same colours.
+# Semantic green/amber/red stay out of the categorical list: categories use
+# the blue ramp plus neutrals so status colours keep their meaning.
 chartCategoricalColors = [
-    "#007AFF", "#66B5FF", "#34C759", "#FF9F0A",
-    "#FF3B30", "#AF52DE", "#5AC8FA", "#8E8E93",
+    "#007AFF", "#0057B8", "#66B5FF", "#5AC8FA",
+    "#8E8E93", "#C7C7CC", "#AF52DE", "#E5E5EA",
 ]
 chartSequentialColors = ["#E3F0FF", "#B3D9FF", "#66B5FF", "#007AFF", "#0055B8"]
-# The diverging scale avoids the red-green pairing of RdYlGn, which is the
-# least colour-blind-safe palette and is exactly the distinction being encoded.
-chartDivergingColors = ["#FF3B30", "#FF9F0A", "#D2D2D7", "#66B5FF", "#34C759"]
+# Status is carried by the single-hue bar plus its zero line in the app, so
+# the diverging scale stays neutral here rather than reusing pass/fail hues.
+chartDivergingColors = ["#0057B8", "#66B5FF", "#D2D2D7", "#C7C7CC", "#8E8E93"]
 
 codeBackgroundColor = "#F5F5F7"
 codeTextColor = "#1D1D1F"

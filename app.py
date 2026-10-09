@@ -1,6 +1,6 @@
 """
 Data Quality Dashboard for Multi-Project Cost Management
-Main Streamlit application for real-time data quality monitoring
+Main Streamlit application for data quality monitoring
 """
 
 import streamlit as st
@@ -8,11 +8,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import json
-from datetime import datetime
 import os
-from typing import Optional
 
 # Import our custom modules
 from data_quality.legacy.pipeline import DataPipeline
@@ -26,20 +22,22 @@ from data_quality.legacy.contract import get_contract_specification
 # and the charts are guaranteed to agree.  Keeping them in one place means a
 # palette change happens once rather than drifting between the app and the
 # figure-export module.
-ACCENT = "#007AFF"      # system blue - primary series
-GOOD = "#34C759"        # green   - within target / valid
-WARN = "#FF9F0A"        # amber   - attention
-BAD = "#FF3B30"         # red     - out of target / invalid
-NEUTRAL = "#8E8E93"     # grey    - reference lines
+ACCENT = "#007AFF"      # blue - primary series
+GOOD = "#34C759"        # green - within target / valid
+WARN = "#FF9F0A"        # amber - attention
+BAD = "#FF3B30"         # red   - out of target / invalid
+NEUTRAL = "#8E8E93"     # grey  - reference lines
 GRID = "#E5E5EA"        # light grey - axis and grid lines
 INK = "#1D1D1F"         # near-black - text
-MUTED = "#6E6E73"       # grey     - secondary text
+MUTED = "#6E6E73"       # grey - secondary text
 SURFACE = "#FFFFFF"     # card background
 
 # Sequential blue ramp for multi-series charts.  These read as one family
 # rather than the unrelated pastels a default palette would produce.
-SERIES_COLORS = ["#007AFF", "#66B5FF", "#34C759", "#FF9F0A", "#FF3B30",
-                 "#AF52DE", "#5AC8FA", "#8E8E93"]
+# Semantic colours (green/amber/red) are reserved for pass/attention/fail, so
+# categories use this blue ramp plus neutrals instead of reusing them.
+SERIES_COLORS = ["#007AFF", "#0057B8", "#66B5FF", "#5AC8FA",
+                 "#8E8E93", "#C7C7CC", "#AF52DE", "#E5E5EA"]
 
 # A restrained Plotly template matching the Streamlit theme.
 #
@@ -52,7 +50,7 @@ PLOT_LAYOUT = {
     "template": "plotly_white",
     "paper_bgcolor": SURFACE,
     "plot_bgcolor": SURFACE,
-    "font": {"family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+    "font": {"family": "Segoe UI, Roboto, Helvetica, Arial, sans-serif",
              "color": INK, "size": 12},
     "margin": {"t": 55, "b": 45, "l": 60, "r": 25},
 }
@@ -80,7 +78,7 @@ def period_sort_key(periods):
 # Page configuration
 st.set_page_config(
     page_title="Data Quality Dashboard",
-    page_icon="📊",
+    page_icon=":bar_chart:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -95,8 +93,7 @@ CSS_BASE = """
 <style>
     /* Typography */
     html, body, [class*="css"] {
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
-                     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
     }
 
@@ -111,7 +108,7 @@ CSS_BASE = """
         margin: 0 0 0.75rem 0;
     }
 
-    /* A thin gradient rule separates the title from the content without the
+    /* A thin rule separates the title from the content without the
        heaviness of a full-width border. */
     .main-header::after {
         content: "";
@@ -119,7 +116,7 @@ CSS_BASE = """
         width: 100%;
         height: 1px;
         margin-top: 0.9rem;
-        background: linear-gradient(90deg, #D2D2D7 0%, rgba(210,210,215,0) 100%);
+        background: #D8D8DC;
     }
 
     .page-subtitle {
@@ -136,12 +133,6 @@ CSS_BASE = """
         border-radius: 12px;
         padding: 1rem 1.15rem;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-        transition: box-shadow 150ms ease, transform 150ms ease;
-    }
-
-    div[data-testid="stMetric"]:hover {
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
-        transform: translateY(-1px);
     }
 
     div[data-testid="stMetricLabel"] p {
@@ -269,32 +260,18 @@ CSS_COMPONENTS = """
         outline-offset: 2px;
     }
 
-    /* Success green: white text on the Apple green.
-       The theme token (greenTextColor) does not by itself reach the alert
-       container, which kept rendering the default dark green and read as muddy
-       against the #34C759 background.  These selectors were read off the live
-       DOM rather than guessed: the success alert and the metric delta pill.
-       Contrast is 2.22:1, below WCAG AA - a deliberate visual trade. */
-    div[data-testid="stAlertContainer"] p,
-    div[data-testid="stAlertContainer"] span,
-    div[data-testid="stAlertContainer"] div {
-        color: #FFFFFF;
-    }
-
-    div[data-testid="stMetricDelta"] {
-        color: #FFFFFF;
-    }
-
-    /* The delta pill only turns green for a favourable change, so the colour
-       has to be pinned rather than left to the theme. */
+    /* Status text stays white on the saturated green used by the metric
+       delta pill, where the white text is large and bold rather than body
+       copy.  Normal alert text uses the accessible dark green from the
+       theme instead. */
     div[data-testid="stMetricDelta"][data-direction="up"] {
         background-color: #34C759;
         color: #FFFFFF;
     }
 
-    .success { color: #248A3D; }
-    .warning { color: #B25000; }
-    .error   { color: #D70015; }
+    div[data-testid="stMetricDelta"][data-direction="up"] * {
+        color: #FFFFFF;
+    }
 </style>
 """
 st.markdown(CSS_COMPONENTS, unsafe_allow_html=True)
@@ -320,10 +297,10 @@ def main():
     """Main application function"""
     
     # Header
-    st.markdown('<h1 class="main-header">Data Quality Dashboard for Multi-Project Cost Management</h1>', 
+    st.markdown('<h1 class="main-header">Data Quality Dashboard</h1>', 
                 unsafe_allow_html=True)
     st.markdown(
-        '<p class="page-subtitle">Real-time accuracy, completeness, consistency '
+        '<p class="page-subtitle">Accuracy, completeness, consistency '
         'and integrity monitoring for earned-value cost records.</p>',
         unsafe_allow_html=True)
     
@@ -341,14 +318,16 @@ def main():
         # Processing mode selection
         st.subheader("Processing Mode")
         processing_mode = st.radio(
-            "Select Mode",
+            "Mode",
             ["Batch Mode", "Incremental Mode"],
             help="Batch: Analyze entire dataset | Incremental: Add new records"
         )
         
-        # Action buttons
+        # Action buttons: the primary action is the only filled button in the
+        # sidebar, so it stays the clear next step.
         if uploaded_file is not None:
-            if st.button("Process Data", type="primary"):
+            if st.button("Process Data", type="primary",
+                         use_container_width=True):
                 process_uploaded_data(uploaded_file, processing_mode)
         
         st.divider()
@@ -381,12 +360,12 @@ def main():
         # System info
         st.subheader("System Information")
         if st.session_state.data_loaded:
-            st.success(f"✅ Data loaded: {len(st.session_state.current_data)} records")
+            st.success(f"Data loaded: {len(st.session_state.current_data)} records")
             if st.session_state.quality_metrics:
                 st.metric("Overall Quality Score", 
                          f"{st.session_state.quality_metrics['overall_score']:.1f}/100")
         else:
-            st.info("⏳ No data loaded")
+            st.info("No data loaded")
     
     # Main content area
     if st.session_state.data_loaded:
@@ -425,19 +404,19 @@ def process_uploaded_data(uploaded_file, processing_mode: str) -> None:
         if os.path.exists(temp_path):
             os.remove(temp_path)
         
-        st.success(f"✅ Data processed successfully in {processing_mode}!")
+        st.success(f"Data processed successfully in {processing_mode}.")
         st.rerun()
         
     except Exception as e:
-        st.error(f"❌ Error processing data: {str(e)}")
+        st.error(f"Error processing data: {str(e)}")
 
 def display_dashboard() -> None:
     """Display the main dashboard with all tabs"""
     
     # Create tabs
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📊 Data Preview", "📈 Quality Metrics", "🎯 Distribution", 
-        "🔍 Validation Results", "📉 Cost Analysis", "📋 Summary Statistics"
+        "Data Preview", "Quality Metrics", "Distribution",
+        "Validation Results", "Cost Analysis", "Summary Statistics"
     ])
     
     with tab1:
@@ -465,18 +444,16 @@ def display_data_preview() -> None:
     df = st.session_state.current_data
     
     # Show basic info
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total Records", len(df))
+        st.metric("Total Records", f"{len(df):,}")
     with col2:
         st.metric("Total Columns", len(df.columns))
-    with col3:
-        st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB")
     
     st.divider()
     
     # Display dataframe
-    st.dataframe(df.head(100), use_container_width=True)
+    st.dataframe(df.head(100), use_container_width=True, hide_index=True)
     
     # Column info
     st.subheader("Column Information")
@@ -486,7 +463,7 @@ def display_data_preview() -> None:
         "Non-Null Count": df.notna().sum(),
         "Null Count": df.isna().sum()
     })
-    st.dataframe(col_info, use_container_width=True)
+    st.dataframe(col_info, use_container_width=True, hide_index=True)
 
 def display_quality_metrics() -> None:
     """Display quality metrics tab"""
@@ -498,32 +475,20 @@ def display_quality_metrics() -> None:
         st.warning("No quality metrics available")
         return
     
-    # Display metric cards
+    # Display metric cards: the value carries the meaning, so a delta only
+    # appears when the score is below target.
+    metric_items = [
+        ("Accuracy", metrics['accuracy']),
+        ("Completeness", metrics['completeness']),
+        ("Consistency", metrics['consistency']),
+        ("Integrity", metrics['integrity']),
+    ]
     col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        accuracy_score = metrics['accuracy']
-        color = "success" if accuracy_score >= 80 else "warning" if accuracy_score >= 60 else "error"
-        st.metric("Accuracy", f"{accuracy_score:.1f}%", 
-                 delta=f"{accuracy_score-100:.1f}%" if accuracy_score < 100 else "Perfect")
-    
-    with col2:
-        completeness_score = metrics['completeness']
-        color = "success" if completeness_score >= 80 else "warning" if completeness_score >= 60 else "error"
-        st.metric("Completeness", f"{completeness_score:.1f}%",
-                 delta=f"{completeness_score-100:.1f}%" if completeness_score < 100 else "Perfect")
-    
-    with col3:
-        consistency_score = metrics['consistency']
-        color = "success" if consistency_score >= 80 else "warning" if consistency_score >= 60 else "error"
-        st.metric("Consistency", f"{consistency_score:.1f}%",
-                 delta=f"{consistency_score-100:.1f}%" if consistency_score < 100 else "Perfect")
-    
-    with col4:
-        integrity_score = metrics['integrity']
-        color = "success" if integrity_score >= 80 else "warning" if integrity_score >= 60 else "error"
-        st.metric("Integrity", f"{integrity_score:.1f}%",
-                 delta=f"{integrity_score-100:.1f}%" if integrity_score < 100 else "Perfect")
+    for column, (label, score) in zip((col1, col2, col3, col4), metric_items):
+        with column:
+            st.metric(label, f"{score:.1f}%",
+                      delta=f"{score-100:.1f} pts below target" if score < 100 else None,
+                      delta_color="inverse")
     
     st.divider()
     
@@ -574,16 +539,15 @@ def display_quality_metrics() -> None:
                  metrics['consistency'], metrics['integrity']]
     })
     
-    # The four dimensions use the shared series ramp, so the pie reads as part
-    # of the same system as the other charts.
-    fig_pie = px.pie(metric_df, values="Score", names="Dimension", 
-                     title="Data Quality Dimensions Distribution",
-                     color_discrete_sequence=SERIES_COLORS,
-                     hole=0.45)
-    fig_pie.update_traces(textposition="outside", textinfo="label+percent",
-                          marker=dict(line=dict(color=SURFACE, width=2)))
-    fig_pie.update_layout(**PLOT_LAYOUT)
-    st.plotly_chart(fig_pie, use_container_width=True)
+    # The gauge already shows the overall share, so the breakdown is a bar: it
+    # keeps the ranking readable without implying the four scores sum to 100%.
+    fig_bar = px.bar(metric_df, x="Dimension", y="Score",
+                     title="Data Quality Dimensions",
+                     range_y=[0, 100],
+                     color_discrete_sequence=[ACCENT])
+    fig_bar.update_layout(**PLOT_LAYOUT)
+    fig_bar.update_layout(yaxis_title="Score", xaxis_title="")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 def display_distribution_analysis() -> None:
     """Display distribution analysis tab"""
@@ -591,13 +555,13 @@ def display_distribution_analysis() -> None:
     
     df = st.session_state.current_data
     
-    # Select variable for analysis
+    # Numeric variable for analysis
     numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
     if not numeric_columns:
         st.warning("No numeric columns available for analysis")
         return
     
-    selected_variable = st.selectbox("Select Variable for Analysis", numeric_columns)
+    selected_variable = st.selectbox("Variable", numeric_columns)
     
     if selected_variable:
         # Histogram
@@ -628,7 +592,7 @@ def display_distribution_analysis() -> None:
                 df[selected_variable].count()
             ]
         })
-        st.dataframe(stats_df, use_container_width=True)
+        st.dataframe(stats_df, use_container_width=True, hide_index=True)
 
 def display_validation_results() -> None:
     """Display validation results tab"""
@@ -653,11 +617,11 @@ def display_validation_results() -> None:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Total Records", total_records)
+        st.metric("Total Records", f"{total_records:,}")
     with col2:
-        st.metric("Valid Records", validation_results.get('valid_records', 0))
+        st.metric("Valid Records", f"{validation_results.get('valid_records', 0):,}")
     with col3:
-        st.metric("Invalid Records", validation_results.get('invalid_records', 0))
+        st.metric("Invalid Records", f"{validation_results.get('invalid_records', 0):,}")
     with col4:
         st.metric("Quality Score", f"{validation_results['summary']['data_quality_score']:.1f}/100")
     
@@ -680,13 +644,17 @@ def display_validation_results() -> None:
     }
     
     anomaly_df = pd.DataFrame(anomaly_summary)
-    st.dataframe(anomaly_df, use_container_width=True)
+    anomaly_df = anomaly_df[anomaly_df["Count"] > 0]
+    if anomaly_df.empty:
+        st.success("No anomalies detected.")
+    else:
+        st.dataframe(anomaly_df, use_container_width=True, hide_index=True)
     
     # Detailed anomalies
     st.subheader("Detailed Anomalies")
     
     anomaly_type = st.selectbox(
-        "Select Anomaly Type",
+        "Anomaly type",
         ["Missing Values", "Type Errors", "Bounds Violations", "Logical Anomalies", "Duplicates"]
     )
     
@@ -705,13 +673,12 @@ def display_validation_results() -> None:
                 "Suggested Remediation": anomaly['suggested_remediation']
             })
         
-        if anomaly_details:
-            details_df = pd.DataFrame(anomaly_details)
-            st.dataframe(details_df, use_container_width=True)
-        else:
-            st.info(f"No {anomaly_type} detected")
+        details_df = pd.DataFrame(anomaly_details)
+        st.dataframe(details_df, use_container_width=True, hide_index=True)
+        if len(selected_anomalies) > 50:
+            st.caption(f"Showing 50 of {len(selected_anomalies)} findings.")
     else:
-        st.success(f"✅ No {anomaly_type} detected")
+        st.success(f"No {anomaly_type.lower()} detected")
 
 def display_cost_analysis() -> None:
     """Display cost analysis tab"""
@@ -726,8 +693,8 @@ def display_cost_analysis() -> None:
     
     # Project selection
     if 'project_id' in df.columns:
-        projects = df['project_id'].unique()
-        selected_projects = st.multiselect("Select Projects", projects, default=projects[:5])
+        projects = sorted(df['project_id'].unique())
+        selected_projects = st.multiselect("Projects", projects, default=projects[:5])
         
         if selected_projects:
             df_filtered = df[df['project_id'].isin(selected_projects)]
@@ -810,10 +777,8 @@ def display_cost_analysis() -> None:
         st.plotly_chart(fig, use_container_width=True)
     
     # Cost variance distribution
-    st.subheader("Cost Variance Distribution")
-    
     fig_variance = px.histogram(df_filtered, x='variance_pct', nbins=30,
-                               title="Cost Variance Percentage Distribution",
+                               title="Cost Variance Distribution",
                                color_discrete_sequence=[ACCENT])
     # The budget line is the reference the whole chart is read against, so it
     # is drawn in the muted grey rather than a competing colour.
@@ -836,26 +801,13 @@ def display_cost_analysis() -> None:
             variance_by_project['cost_variance'] / variance_by_project['pmb_budget'].replace(0, 1)
         ) * 100
         
-        # A red-green diverging scale (RdYlGn) is the conventional choice here
-        # but it is the single most colour-blind-hostile palette, and red/green
-        # is exactly the distinction being encoded.  This keeps the same
-        # under/over-budget meaning using the theme's red and green as *light*
-        # endpoints around a neutral centre, which stays legible for viewers
-        # with red-green colour vision deficiency.
-        variance_scale = [
-            [0.0, "#FF3B30"],      # heavily over budget
-            [0.35, "#FF9F0A"],     # over budget
-            [0.5, "#D2D2D7"],      # on budget
-            [0.65, "#66B5FF"],     # under budget
-            [1.0, "#34C759"],      # well under budget
-        ]
-
+        # A single-hue scale keeps the ranking readable without implying a
+        # pass/fail judgement on every bar: only the zero line carries meaning.
         fig_project = px.bar(variance_by_project, x='project_id', y='variance_pct',
                            title="Cost Variance Percentage by Project",
-                           color='variance_pct',
-                           color_continuous_scale=variance_scale)
+                           color_discrete_sequence=[ACCENT])
         fig_project.add_hline(y=0, line_dash="dash", line_color=NEUTRAL)
-        fig_project.update_layout(**PLOT_LAYOUT, coloraxis_colorbar_title="Variance %")
+        fig_project.update_layout(**PLOT_LAYOUT)
         st.plotly_chart(fig_project, use_container_width=True)
 
 def display_summary_statistics() -> None:
@@ -870,13 +822,12 @@ def display_summary_statistics() -> None:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.metric("Total Records", summary['total_records'])
+        st.metric("Total Records", f"{summary['total_records']:,}")
         st.metric("Total Columns", len(summary['columns']))
-        st.metric("Memory Usage", f"{summary['memory_usage'] / 1024:.1f} KB")
     
     with col2:
         if 'date_range' in summary and summary['date_range']:
-            st.write("Date Ranges:")
+            st.markdown("**Date ranges**")
             for col, range_info in summary['date_range'].items():
                 st.write(f"**{col}:** {range_info['min']} to {range_info['max']}")
     
@@ -898,7 +849,7 @@ def display_summary_statistics() -> None:
                         f"{stats['max']:.2f}" if stats['max'] is not None else "N/A"
                     ]
                 })
-                st.dataframe(stats_df, use_container_width=True)
+                st.dataframe(stats_df, use_container_width=True, hide_index=True)
     
     # Categorical statistics
     if summary['categorical_summary']:
@@ -906,12 +857,12 @@ def display_summary_statistics() -> None:
         
         for col, stats in summary['categorical_summary'].items():
             with st.expander(f"{col}"):
-                st.write(f"**Unique Values:** {stats['unique_count']}")
-                st.write(f"**Most Common:** {stats['most_common']}")
+                st.write(f"Unique values: {stats['unique_count']}")
+                st.write(f"Most common: {stats['most_common']}")
                 
                 # Show value counts
                 value_counts = df[col].value_counts().head(10)
-                st.write("**Top 10 Values:**")
+                st.markdown("**Top 10 values**")
                 st.dataframe(value_counts, use_container_width=True)
 
 def display_data_contract() -> None:
@@ -973,22 +924,6 @@ def display_data_contract() -> None:
         st.markdown("**Logical constraints**")
         for rule in logical:
             st.markdown(f"- {rule}")
-    
-    st.write("### Required Fields")
-    for field in contract_spec['required_fields']:
-        st.write(f"- {field}")
-    
-    st.write("### Field Types")
-    for field, field_type in contract_spec['field_types'].items():
-        st.write(f"- {field}: {field_type}")
-    
-    st.write("### Field Constraints")
-    for field, constraint in contract_spec['field_constraints'].items():
-        st.write(f"- {field}: {constraint}")
-    
-    st.write("### Logical Constraints")
-    for constraint in contract_spec['logical_constraints']:
-        st.write(f"- {constraint}")
 
 def display_welcome_screen() -> None:
     """Display welcome screen when no data is loaded"""
@@ -998,30 +933,30 @@ def display_welcome_screen() -> None:
     
     with col1:
         st.info("""
-        ### Getting Started
+        **Getting started**
         
-        1. **Upload your data** using the file uploader in the sidebar
-        2. **Select processing mode** (Batch for historical analysis, Incremental for new records)
-        3. **Click "Process Data"** to run validation and quality checks
-        4. **Explore the results** across different tabs:
-           - 📊 Data Preview: View your uploaded data
-           - 📈 Quality Metrics: See accuracy, completeness, consistency, integrity scores
-           - 🎯 Distribution: Analyze data distributions
-           - 🔍 Validation Results: Review detected anomalies
-           - 📉 Cost Analysis: Compare budget vs actual costs
-           - 📋 Summary Statistics: View comprehensive statistics
+        1. Upload your data using the file uploader in the sidebar
+        2. Select a processing mode (Batch for historical analysis, Incremental for new records)
+        3. Select "Process Data" to run validation and quality checks
+        4. Explore the results across the tabs:
+           - Data Preview: view the uploaded records
+           - Quality Metrics: accuracy, completeness, consistency and integrity scores
+           - Distribution: data distributions
+           - Validation Results: detected anomalies
+           - Cost Analysis: budget against actual cost
+           - Summary Statistics: descriptive statistics
         """)
     
     with col2:
         st.success("""
-        ### Features
+        **Checks**
         
-        ✅ Real-time validation
-        ✅ Dual-mode processing
-        ✅ Interactive visualizations
-        ✅ Comprehensive metrics
-        ✅ Anomaly detection
-        ✅ Cost variance analysis
+        - On-demand validation
+        - Dual-mode processing
+        - Interactive visualizations
+        - Comprehensive metrics
+        - Anomaly detection
+        - Cost variance analysis
         """)
     
     st.divider()
