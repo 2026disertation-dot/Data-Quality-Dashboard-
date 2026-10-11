@@ -17,6 +17,32 @@ python -m data_quality.reporting.run_pipeline     # full evidence chain
 streamlit run app.py                     # dashboard
 ```
 
+## Team
+
+Five members contributed equally to this group project. Roles were assigned according to each person's primary responsibility, and every role maps directly to one of the project's six objectives.
+
+| Name | Banner ID | Role | Objective |
+|------|-----------|------|-----------|
+| Eric Kaitoo | B01848427 | Theory & Integration Lead | Objective 1 & 6 |
+| Dorcas Owusu | B01829419 | Diagnostics Lead | Objective 2 |
+| Obed Sarbeng Amponsah | B01845424 | Backend / Pipeline Lead | Objective 3 |
+| Fredrick Hoamiah | B01934177 | Frontend / Visualisation Lead | Objective 4 |
+| Matilda Fosua | B01847480 | Evaluation & Validation Lead | Objective 5 |
+
+### Role Responsibilities
+
+**Eric Kaitoo (Theory & Integration Lead)**: Establishes the theoretical and architectural framework, synthesising data quality dimensions, project cost-control principles, and dashboard design knowledge. Defines the conceptual data contract that governs dual-mode operation and ensures integration and dual-mode consistency across all components.
+
+**Dorcas Owusu (Diagnostics Lead)**: Conducts systematic profiling of the Project Portfolio Dataset, defines quantitative metrics for completeness, consistency, accuracy, and integrity, designs detection rules that operate consistently in both batch and incremental modes, and quantifies the impact of inconsistencies on cost variance and forecasting reliability.
+
+**Obed Sarbeng Amponsah (Backend / Pipeline Lead)**: Designs and implements a modular, reproducible data pipeline and validation engine in Python, develops the formal data contract, builds the live Flask API endpoint for real-time validation, and ensures reproducibility through configuration-driven pipelines and version control.
+
+**Fredrick Hoamiah (Frontend / Visualisation Lead)**: Designs and implements an interactive Python dashboard that visualises and prioritises data quality inconsistencies, provides clear visual and textual feedback for validation failures, supports dual operating views (historical and incremental), and integrates cleanly with backend pipeline and diagnostic scoring components.
+
+**Matilda Fosua (Evaluation & Validation Lead)**: Designs a structured evaluation protocol covering historical and dynamic/malformed data conditions, constructs realistic test cases, conducts comparative testing against spreadsheet-based quality checks, applies a structured system testing framework, and produces a comprehensive evaluation report with evidence-based recommendations.
+
+Individual contribution statements and detailed role documentation are available in the `team/` directory.
+
 ## Layout
 
 One package, `data_quality/`, at the repository root so that `streamlit run app.py`
