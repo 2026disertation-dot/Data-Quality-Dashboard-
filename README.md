@@ -3,14 +3,13 @@
 Detecting inconsistencies in multi-project WBS cost and progress data.
 
 **Every number below is generated, never hand-typed.**
-`python -m data_quality.reporting.report` rewrites this file and `results/RESULTS.md`
-together from one live measurement, so they cannot disagree with each other or
-with the code.
+`python -m data_quality.reporting.report` regenerates this file from live measurements,
+so it cannot disagree with the actual code behavior.
 
 ```bash
 pip install -r requirements.txt
 python -m pytest -q                      # test suite
-python -m data_quality.reporting.report           # regenerate this file + RESULTS.md
+python -m data_quality.reporting.report           # regenerate this file
 python -m data_quality.preprocess.download        # fetch the Kaggle dataset
 python -m data_quality.preprocess.clean           # build data/*.csv
 python -m data_quality.reporting.run_pipeline     # full evidence chain
@@ -32,6 +31,7 @@ data_quality/
   preprocess/  download and clean, producing data/*.csv
   reporting/   evaluation, document generation, figures, pipeline runner
   legacy/      the superseded single-tier implementation, kept as baseline
+data/          Kaggle dataset and test files
 app.py         Streamlit dashboard, the only Python file at the repository root
 ```
 
