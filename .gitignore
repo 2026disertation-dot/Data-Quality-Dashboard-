@@ -226,11 +226,11 @@ kaggle.json
 .kaggle/
 
 # Generated research evidence (regenerate with: python -m data_quality.reporting.run_pipeline)
-# results/ is intentionally tracked so the figures stay reviewable.
+# results/ is ignored - regenerate with: python -m data_quality.reporting.run_pipeline
+results/
 # Transient pipeline outputs plus the sub-reports run_pipeline regenerates:
 data/kaggle_batch_data.csv
 data/kaggle_incremental_data.csv
-results/pipeline/
 
 # Local scratch files
 temp_upload.*
