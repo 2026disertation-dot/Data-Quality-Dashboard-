@@ -51,10 +51,10 @@ from data_quality.legacy.engine import ValidationEngine
 # subfolder: results/RESULTS.md is the single top-level report.
 DEFAULT_REPORT = os.path.join("results", "pipeline", "system_testing_results.md")
 
-# Targets from the research evaluation (Chapter 3.7)
+# Targets from the research evaluation (Section 3.6.5, Table 3.13)
 DETECTION_COMPLETENESS_TARGET = 95.0
 FALSE_POSITIVE_TARGET = 5.0
-PERFORMANCE_TARGET_SECONDS = 5.0
+PERFORMANCE_TARGET_SECONDS = 10.0
 
 # Data quality dimension targets
 DIMENSION_TARGETS = {

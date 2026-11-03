@@ -321,10 +321,22 @@ class TestDeCumulativise:
         assert periods.tolist() == [42.0]
         assert negative == 0
 
-    def test_clips_and_counts_negative_movements(self):
-        periods, negative = de_cumulativise(pd.Series([100.0, 80.0, 120.0]))
+    def test_retains_negative_movement_when_revision_not_confirmed(self):
+        periods, negative_count = de_cumulativise(
+            pd.Series([100.0, 80.0, 120.0])
+        )
+
+        assert periods.tolist() == [100.0, -20.0, 40.0]
+        assert negative_count == 1
+
+    def test_clips_negative_movement_when_revision_confirmed(self):
+        periods, negative_count = de_cumulativise(
+            pd.Series([100.0, 80.0, 120.0]),
+            confirmed_revision=True,
+        )
+
         assert periods.tolist() == [100.0, 0.0, 40.0]
-        assert negative == 1
+        assert negative_count == 1
 
     def test_treats_blanks_as_zero(self):
         periods, negative = de_cumulativise(pd.Series([100.0, None, 150.0]))
@@ -373,11 +385,14 @@ class TestTransformToContract:
         cleaned, _report = transform_to_contract(long_evm_frame)
         assert cleaned["time_period"].tolist() == ["Month-1", "Month-2", "Month-3"]
 
-    def test_de_cumulativises_into_period_budget_and_cost(self, long_evm_frame):
+    def test_stores_cumulative_budget_and_cost(self, long_evm_frame):
+        # The derived contract keeps CUMULATIVE values (Chapter 4): R9 checks
+        # cumulative monotonicity on the project-period view, so the stored
+        # figures are the running totals, not the period movements.
         cleaned, _report = transform_to_contract(long_evm_frame)
-        assert cleaned["pmb_budget"].tolist() == [100.0, 150.0, 50.0]
-        assert cleaned["actual_cost"].tolist() == [50.0, 90.0, 20.0]
-        assert cleaned["revenue_claimed"].tolist() == [60.0, 160.0, 80.0]
+        assert cleaned["pmb_budget"].tolist() == [100.0, 250.0, 300.0]
+        assert cleaned["actual_cost"].tolist() == [50.0, 140.0, 160.0]
+        assert cleaned["revenue_claimed"].tolist() == [60.0, 220.0, 300.0]
 
     def test_progress_is_share_of_baseline(self, long_evm_frame):
         cleaned, report = transform_to_contract(long_evm_frame)
@@ -385,10 +400,11 @@ class TestTransformToContract:
         assert report.baselines["P01"] == 300.0
         assert cleaned["progress_pct"].tolist() == [20.0, 73.33, 100.0]
 
-    def test_period_budgets_sum_to_the_baseline(self, long_evm_frame):
+    def test_final_cumulative_budget_equals_the_baseline(self, long_evm_frame):
         cleaned, report = transform_to_contract(long_evm_frame)
-        total = cleaned["pmb_budget"].sum()
-        assert total == pytest.approx(report.baselines["P01"], abs=0.01)
+        # The cumulative planned value at the last period is the baseline.
+        final = cleaned.sort_values("time_period")["pmb_budget"].iloc[-1]
+        assert final == pytest.approx(report.baselines["P01"], abs=0.01)
 
     def test_baseline_start_is_first_reporting_month(self, long_evm_frame):
         cleaned, _report = transform_to_contract(long_evm_frame)
@@ -404,12 +420,14 @@ class TestTransformToContract:
         assert is_valid, errors
 
     def test_money_columns_are_never_negative(self, long_evm_frame):
+        # A source revision downwards is retained in the cumulative series so
+        # R9 can flag it; the stored money columns are still clipped at zero.
         revised = long_evm_frame.copy()
         revised.loc[2, "pv_cum"] = 10.0  # source history revised downwards
-        cleaned, report = transform_to_contract(revised)
+        cleaned, _report = transform_to_contract(revised)
         assert (cleaned["pmb_budget"] >= 0).all()
         assert (cleaned["actual_cost"] >= 0).all()
-        assert report.negative_diffs >= 1
+        assert cleaned["pmb_budget"].tolist() == [100.0, 250.0, 10.0]
 
     def test_progress_is_clipped_to_the_contract_range(self, long_evm_frame):
         overrun = long_evm_frame.copy()

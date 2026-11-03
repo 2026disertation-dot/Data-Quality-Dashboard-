@@ -28,7 +28,8 @@ import plotly.graph_objects as go
 import data_quality.legacy.fixtures as data_fixtures
 from data_quality.legacy.fixtures import load_fixtures
 from data_quality.legacy.pipeline import DataPipeline
-from data_quality.legacy.profiling import load_cleaned_data, project_summary, summary_statistics_table
+from data_quality.legacy.profiling import (load_cleaned_data, period_movements,
+                                           project_summary, summary_statistics_table)
 from data_quality.legacy.engine import ValidationEngine
 
 # Where the PNGs are written
@@ -40,6 +41,12 @@ ACCENT = "#1f77b4"
 GOOD = "#2ecc71"
 WARN = "#f39c12"
 BAD = "#e74c3c"
+
+# Clean research figure settings
+CLEAN_LAYOUT = {
+    "margin": {"t": 60, "b": 50, "l": 60, "r": 30},
+    "font": {"size": 12},
+}
 
 # The four dimensions, in the order the research presents them.
 DIMENSIONS = ["accuracy", "completeness", "consistency", "integrity"]
@@ -109,20 +116,22 @@ def figure_data_preview(df, rows=8):
     )
 
 
-def figure_dimension_scores(metrics, targets=None):
+def figure_dimension_scores(metrics, targets=None, clean=False):
     """
     Figure: the four data quality dimension scores against their targets.
 
     Args:
         metrics: Quality metrics from ``DataPipeline.process_batch``.
         targets: Optional target per dimension, drawn as a marker.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A horizontal bar chart of the dimension scores.
     """
     if targets is None:
-        targets = {"accuracy": 95.0, "completeness": 100.0,
-                   "consistency": 95.0, "integrity": 90.0}
+        # Targets from Chapter 3, Table 3.5
+        targets = {"completeness": 98.0, "consistency": 99.0,
+                   "accuracy": 97.0, "integrity": 99.0}
 
     values = [float(metrics.get(dimension, 0.0)) for dimension in DIMENSIONS]
     colours = [GOOD if value >= targets[dimension] else
@@ -135,54 +144,58 @@ def figure_dimension_scores(metrics, targets=None):
             y=[dimension.capitalize() for dimension in DIMENSIONS],
             orientation="h",
             marker_color=colours,
-            text=[f"{value:.2f}%" for value in values],
-            textposition="outside",
+            text=[f"{value:.1f}%" for value in values] if not clean else None,
+            textposition="outside" if not clean else None,
         )
     )
     for dimension, value in zip(DIMENSIONS, values):
         figure.add_vline(x=targets[dimension], line_dash="dot", line_color="#555",
-                         annotation_text=f"target {targets[dimension]:.0f}%",
-                         annotation_position="top")
+                         annotation_text=f"{targets[dimension]:.0f}%" if not clean else "",
+                         annotation_position="top" if not clean else "top right")
     figure.update_layout(
-        title="Data quality dimension scores",
-        xaxis_title="Score (%)",
-        yaxis_title="",
+        title="Data Quality Dimension Scores" if not clean else "",
+        xaxis_title="Score (%)" if not clean else "Score (%)",
+        yaxis_title="" if not clean else "",
         xaxis_range=[0, 115],
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_cost_distribution(df, column="actual_cost"):
+def figure_cost_distribution(df, column="actual_cost", clean=False):
     """
     Figure: the distribution of a selected cost variable.
 
     Args:
         df: The cleaned cost records.
         column: The cost column to plot.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A histogram of the selected variable.
     """
     figure = px.histogram(
-        df, x=column, nbins=30, marginal="box",
-        labels={column: f"{column} (currency)"},
+        df, x=column, nbins=30, marginal="box" if not clean else None,
+        labels={column: column if clean else f"{column} (currency)"},
         color_discrete_sequence=[ACCENT],
     )
     figure.update_layout(
-        title=f"Distribution of {column}",
+        title=f"Distribution of {column}" if not clean else "",
         template=COLOUR_TEMPLATE,
         showlegend=False,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_summary_statistics(stats):
+def figure_summary_statistics(stats, clean=False):
     """
     Figure: mean, median and mode for each cost variable.
 
     Args:
         stats: Summary statistics from ``profiling.summary_statistics_table``.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A grouped bar chart of central tendency per variable.
@@ -197,11 +210,15 @@ def figure_summary_statistics(stats):
         labels={"field": "Variable", "value": "Value", "statistic": "Statistic"},
         color_discrete_sequence=[ACCENT, WARN, GOOD],
     )
-    figure.update_layout(title="Summary statistics by variable", template=COLOUR_TEMPLATE)
+    figure.update_layout(
+        title="Summary Statistics by Variable" if not clean else "",
+        template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
+    )
     return figure
 
 
-def figure_planned_vs_actual(df, project=None):
+def figure_planned_vs_actual(df, project=None, clean=False):
     """
     Figure: cumulative planned value against cumulative actual cost over time.
 
@@ -209,9 +226,15 @@ def figure_planned_vs_actual(df, project=None):
     project should track its baseline, and a divergence is either genuine cost
     performance or a data quality defect.
 
+    The derived contract already stores ``pmb_budget`` and ``actual_cost`` as
+    cumulative values (Chapter 4, Challenge 6), so the stored series *is* the
+    cumulative curve and is plotted directly.  Accumulating it again here would
+    sum the running totals and push every line far above the project's budget.
+
     Args:
         df: The cleaned cost records.
         project: Optional single project to show. None shows every project.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A line chart of planned versus actual cost.
@@ -230,68 +253,45 @@ def figure_planned_vs_actual(df, project=None):
     for project_id in sorted(wide["project_id"].unique()):
         series = wide[wide["project_id"] == project_id].sort_values("actual_date")
         figure.add_trace(go.Scatter(
-            x=series["actual_date"], y=series["planned"].cumsum(),
-            name=f"{project_id} planned", mode="lines+markers",
+            x=series["actual_date"], y=series["planned"],
+            name=f"{project_id} planned" if not clean else f"P{project_id}",
+            mode="lines" if clean else "lines+markers",
             line=dict(dash="dot"),
         ))
         figure.add_trace(go.Scatter(
-            x=series["actual_date"], y=series["actual"].cumsum(),
-            name=f"{project_id} actual", mode="lines+markers",
+            x=series["actual_date"], y=series["actual"],
+            name=f"{project_id} actual" if not clean else f"{project_id}",
+            mode="lines" if clean else "lines+markers",
         ))
 
     figure.update_layout(
-        title="Cumulative planned value vs actual cost"
-              + (f" - {project}" if project else " - all projects"),
-        xaxis_title="Reporting month",
-        yaxis_title="Cumulative cost",
+        title="Cumulative Planned Value vs Actual Cost"
+              + (f" - {project}" if project else " - All Projects") if not clean else "",
+        xaxis_title="Reporting Month" if not clean else "Month",
+        yaxis_title="Cumulative Cost" if not clean else "Cost",
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_project_summary(summary):
-    """
-    Figure: budget against actual cost at project level.
-
-    Args:
-        summary: Output of ``profiling.project_summary``.
-
-    Returns:
-        go.Figure: A grouped bar chart per project.
-    """
-    melted = summary.melt(
-        id_vars="project_id",
-        value_vars=["total_pmb_budget", "total_actual_cost", "total_revenue_claimed"],
-        var_name="measure", value_name="value",
-    )
-    melted["measure"] = melted["measure"].map({
-        "total_pmb_budget": "PMB budget",
-        "total_actual_cost": "Actual cost",
-        "total_revenue_claimed": "Revenue claimed",
-    })
-    figure = px.bar(
-        melted, x="project_id", y="value", color="measure", barmode="group",
-        labels={"project_id": "Project", "value": "Total (currency)"},
-        color_discrete_sequence=[ACCENT, BAD, GOOD],
-    )
-
-
-def figure_anomaly_breakdown(results):
+def figure_anomaly_breakdown(results, clean=False):
     """
     Figure: how many findings the engine raised in each anomaly category.
 
     Args:
         results: Output of ``ValidationEngine.validate_batch``.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A bar chart of the per-category finding counts.
     """
     summary = results.get("summary", {})
     labels = {
-        "missing_count": "Missing values",
-        "type_error_count": "Type errors",
-        "bounds_violation_count": "Bounds violations",
-        "logical_anomaly_count": "Logical anomalies",
+        "missing_count": "Missing" if clean else "Missing values",
+        "type_error_count": "Type errors" if clean else "Type errors",
+        "bounds_violation_count": "Bounds" if clean else "Bounds violations",
+        "logical_anomaly_count": "Logical" if clean else "Logical anomalies",
         "duplicate_count": "Duplicates",
     }
     keys = list(labels)
@@ -301,25 +301,27 @@ def figure_anomaly_breakdown(results):
         x=[labels[key] for key in keys],
         y=values,
         marker_color=[BAD if value else GOOD for value in values],
-        text=[str(value) for value in values],
-        textposition="outside",
+        text=[str(value) for value in values] if not clean else None,
+        textposition="outside" if not clean else None,
     ))
     figure.update_layout(
-        title="Validation findings by anomaly category",
-        xaxis_title="Category",
-        yaxis_title="Findings",
+        title="Validation Findings by Anomaly Category" if not clean else "",
+        xaxis_title="Category" if not clean else "",
+        yaxis_title="Findings" if not clean else "Count",
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_incremental_validation(ground_truth, results):
+def figure_incremental_validation(ground_truth, results, clean=False):
     """
     Figure: what the dashboard reports when malformed records arrive.
 
     Args:
         ground_truth: The defects injected into the test set.
         results: Validation output for that set.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A grouped bar chart of detected versus injected defects.
@@ -334,21 +336,22 @@ def figure_incremental_validation(ground_truth, results):
     names = sorted(set(injected.index) | set(detected.index))
     figure = go.Figure([
         go.Bar(x=names, y=[int(injected.get(name, 0)) for name in names],
-               name="Injected", marker_color=ACCENT),
+               name="Injected" if not clean else "Inj", marker_color=ACCENT),
         go.Bar(x=names, y=[int(detected.get(name, 0)) for name in names],
-               name="Detected", marker_color=GOOD),
+               name="Detected" if not clean else "Det", marker_color=GOOD),
     ])
     figure.update_layout(
-        title="Incremental validation: injected versus detected defects",
-        xaxis_title="Injected defect",
-        yaxis_title="Count",
+        title="Incremental Validation: Injected vs Detected" if not clean else "",
+        xaxis_title="Defect" if not clean else "",
+        yaxis_title="Count" if not clean else "",
         barmode="group",
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_system_testing(evidence, targets):
+def figure_system_testing(evidence, targets, clean=False):
     """
     Figure: the system-testing measures against their targets.
 
@@ -359,6 +362,7 @@ def figure_system_testing(evidence, targets):
     Args:
         evidence: The measured evidence from ``run_pipeline.measure``.
         targets: The target values, keyed as in the report.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A bar chart of attainment against target.
@@ -387,22 +391,23 @@ def figure_system_testing(evidence, targets):
         x=[row[0] for row in rows],
         y=attainment,
         marker_color=[GOOD if score >= 100 else BAD for score in attainment],
-        text=[f"{row[1]:.2f}" for row in rows],
-        textposition="outside",
+        text=[f"{row[1]:.2f}" for row in rows] if not clean else None,
+        textposition="outside" if not clean else None,
         hovertemplate="%{x}<br>attainment %{y:.1f}% of target<extra></extra>",
     ))
     figure.add_hline(y=100, line_dash="dot", line_color="#555",
-                     annotation_text="target")
+                     annotation_text="target" if not clean else "")
     figure.update_layout(
-        title="System testing: attainment against target",
-        xaxis_title="Measure",
-        yaxis_title="Percent of target met",
+        title="System Testing: Attainment Against Target" if not clean else "",
+        xaxis_title="Measure" if not clean else "",
+        yaxis_title="Percent of Target Met" if not clean else "%",
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
-def figure_cost_variance_effect(cleaned, flagged_rows):
+def figure_cost_variance_effect(cleaned, flagged_rows, clean=False):
     """
     Figure: cost variance before and after the flagged records are removed.
 
@@ -413,6 +418,7 @@ def figure_cost_variance_effect(cleaned, flagged_rows):
     Args:
         cleaned: The real cleaned cost records.
         flagged_rows: Row indices the engine flagged.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: Overlaid histograms of the two variance distributions.
@@ -423,26 +429,29 @@ def figure_cost_variance_effect(cleaned, flagged_rows):
 
     figure = go.Figure()
     figure.add_histogram(
-        x=frame["cost_variance"], name="As received", nbinsx=40,
+        x=frame["cost_variance"], name="As received" if not clean else "Before",
+        nbinsx=40,
         opacity=0.55, marker_color=BAD,
     )
     figure.add_histogram(
-        x=treated["cost_variance"], name="After anomaly treatment", nbinsx=40,
+        x=treated["cost_variance"], name="After anomaly treatment" if not clean else "After",
+        nbinsx=40,
         opacity=0.55, marker_color=GOOD,
     )
     figure.update_layout(
-        title="Cost variance distribution before and after anomaly treatment",
-        xaxis_title="Cost variance (revenue claimed - actual cost)",
-        yaxis_title="Records",
+        title="Cost Variance Distribution Before and After Anomaly Treatment" if not clean else "",
+        xaxis_title="Cost Variance" if not clean else "Variance",
+        yaxis_title="Records" if not clean else "",
         barmode="overlay",
         template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
     )
     return figure
 
 
 def figure_pipeline_workflow(fixtures):
     """
-    Figure: the dual-mode pipeline, from ingest through validation to reporting.
+    Figure: the multi-mode pipeline, from ingest through validation to reporting.
 
     Args:
         fixtures: The real-data fixtures, used for the record counts.
@@ -482,7 +491,7 @@ def figure_pipeline_workflow(fixtures):
     ))
 
     figure.update_layout(
-        title="Dual-mode pipeline: batch and incremental processing",
+        title="multi-mode pipeline: batch and incremental processing",
         xaxis=dict(visible=False, range=[-0.5, 2.5]),
         yaxis=dict(visible=False, range=[-0.4, 1.8]),
         template=COLOUR_TEMPLATE,
@@ -490,12 +499,13 @@ def figure_pipeline_workflow(fixtures):
     return figure
 
 
-def figure_project_summary(summary):
+def figure_project_summary(summary, clean=False):
     """
     Figure: budget against actual cost at project level.
 
     Args:
         summary: Output of ``profiling.project_summary``.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         go.Figure: A grouped bar chart per project.
@@ -506,16 +516,20 @@ def figure_project_summary(summary):
         var_name="measure", value_name="value",
     )
     melted["measure"] = melted["measure"].map({
-        "total_pmb_budget": "PMB budget",
-        "total_actual_cost": "Actual cost",
-        "total_revenue_claimed": "Revenue claimed",
+        "total_pmb_budget": "Budget" if clean else "PMB budget",
+        "total_actual_cost": "Actual" if clean else "Actual cost",
+        "total_revenue_claimed": "Revenue" if clean else "Revenue claimed",
     })
     figure = px.bar(
         melted, x="project_id", y="value", color="measure", barmode="group",
-        labels={"project_id": "Project", "value": "Total (currency)"},
+        labels={"project_id": "Project", "value": "Value" if clean else "Total (currency)"},
         color_discrete_sequence=[ACCENT, BAD, GOOD],
     )
-    figure.update_layout(title="Project cost summary", template=COLOUR_TEMPLATE)
+    figure.update_layout(
+        title="Project Cost Summary" if not clean else "",
+        template=COLOUR_TEMPLATE,
+        **CLEAN_LAYOUT if clean else {}
+    )
     return figure
 
 
@@ -537,7 +551,7 @@ def save_figure(figure, name, directory=DEFAULT_OUTPUT_DIR):
     return path
 
 
-def build_all_figures(cleaned, fixtures, evidence, targets, directory=DEFAULT_OUTPUT_DIR):
+def build_all_figures(cleaned, fixtures, evidence, targets, directory=DEFAULT_OUTPUT_DIR, clean=False):
     """
     Build and export the whole figure set from the real data.
 
@@ -547,6 +561,7 @@ def build_all_figures(cleaned, fixtures, evidence, targets, directory=DEFAULT_OU
         evidence: Measured evidence from ``run_pipeline.measure``.
         targets: System-testing targets.
         directory: Where the PNGs are written.
+        clean: If True, generate minimal clutter for research publication.
 
     Returns:
         dict: Figure name to written path.
@@ -562,17 +577,18 @@ def build_all_figures(cleaned, fixtures, evidence, targets, directory=DEFAULT_OU
 
     figures = {
         "fig01_data_preview": figure_data_preview(cleaned),
-        "fig02_dimension_scores": figure_dimension_scores(metrics),
-        "fig03_cost_distribution": figure_cost_distribution(cleaned, "actual_cost"),
+        "fig02_dimension_scores": figure_dimension_scores(metrics, clean=clean),
+        "fig03_cost_distribution": figure_cost_distribution(
+            period_movements(cleaned), "actual_cost", clean=clean),
         "fig04_summary_statistics": figure_summary_statistics(
-            summary_statistics_table(cleaned)),
-        "fig05_planned_vs_actual": figure_planned_vs_actual(cleaned),
-        "fig06_project_summary": figure_project_summary(project_summary(cleaned)),
-        "fig07_anomaly_breakdown": figure_anomaly_breakdown(clean_results),
+            summary_statistics_table(cleaned), clean=clean),
+        "fig05_planned_vs_actual": figure_planned_vs_actual(cleaned, clean=clean),
+        "fig06_project_summary": figure_project_summary(project_summary(cleaned), clean=clean),
+        "fig07_anomaly_breakdown": figure_anomaly_breakdown(clean_results, clean=clean),
         "fig08_incremental_validation": figure_incremental_validation(
-            fixtures["ground_truth"], anomaly_results),
-        "fig09_system_testing": figure_system_testing(evidence, targets),
-        "fig10_cost_variance_effect": figure_cost_variance_effect(cleaned, flagged),
+            fixtures["ground_truth"], anomaly_results, clean=clean),
+        "fig09_system_testing": figure_system_testing(evidence, targets, clean=clean),
+        "fig10_cost_variance_effect": figure_cost_variance_effect(cleaned, flagged, clean=clean),
         "fig11_pipeline_workflow": figure_pipeline_workflow(fixtures),
     }
 
@@ -591,6 +607,8 @@ def main():
     )
     parser.add_argument("--output", default=DEFAULT_OUTPUT_DIR,
                         help="Directory to write the PNG figures into")
+    parser.add_argument("--clean", action="store_true",
+                        help="Generate minimal clutter for research publication")
     args = parser.parse_args()
 
     cleaned = load_cleaned_data()
@@ -611,7 +629,7 @@ def main():
     evidence = measure(cleaned, fixtures)
     print("Building figures...")
     written = build_all_figures(cleaned, fixtures, evidence, targets,
-                                directory=args.output)
+                                directory=args.output, clean=args.clean)
     print(f"\nWrote {len(written)} figures to {args.output}")
     return 0
 

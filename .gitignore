@@ -235,3 +235,12 @@ results/pipeline/
 # Local scratch files
 temp_upload.*
 *_result.txt
+
+# ---------------------------------------------------------------------------
+# Project specific (additional)
+# ---------------------------------------------------------------------------
+# Figure PNGs are tracked so Markdown preview and GitHub rendering can display them.
+# Regenerate with: python -m data_quality.reporting.figures
+
+# Team contribution statements (personal)
+team/

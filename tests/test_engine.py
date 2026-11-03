@@ -44,15 +44,16 @@ def test_findings_do_not_exceed_total_records(validator, raw_data):
     assert result.invalid_records <= result.total_records
 
 
-def test_r9_is_the_only_rule_firing_on_clean_real_data(validator, raw_data):
-    """The source workbooks are structurally consistent.
+def test_raw_tier_is_structurally_clean_on_real_data(validator, raw_data):
+    """The source workbooks are structurally consistent at the WBS level.
 
-    This is a genuine property of the real dataset, not a gap: R5, R6, R7, R11
-    and R12 all return zero because the data has no duplicates, naming
-    conflicts, WBS mapping errors or missing descriptions.
+    This is a genuine property of the real dataset, not a gap.  Rules are
+    tier-gated (Chapter 3, Table 3.9): the WBS-level view runs R1-R7, R10, R11
+    and R12, all of which return zero because the data has no missing fields,
+    duplicates, naming conflicts, WBS mapping errors or missing descriptions.
     """
     result = validator.validate(raw_data, tier="raw")
-    assert set(result.findings_by_rule()) == {"R9"}
+    assert set(result.findings_by_rule()) == set()
 
 
 def test_wbs_code_keeps_leading_zeros(validator):
@@ -94,20 +95,32 @@ def test_iso_text_dates_are_not_type_errors(validator):
     assert "R2" not in result.findings_by_rule()
 
 
-def test_r9_detects_a_restatement(validator, raw_data):
-    """Halving a cumulative total must be caught by R9."""
-    frame = raw_data.copy()
-    frame["wbs_code"] = frame["wbs_code"].astype(str)
-    target = frame.loc[(frame["project_id"] == "P01") & (frame["wbs_code"] == "11")]
-    position = target.index[1]
-    frame.loc[position, "ev_cum"] = float(frame.loc[position, "ev_cum"]) * 0.5
+def test_r9_detects_a_cumulative_decrease(validator):
+    """A cumulative total that falls must be caught by R9.
 
-    result = validator.validate(frame, tier="raw")
+    R9 is a project-period rule (Chapter 3, Table 3.9), so it is exercised on
+    the derived tier against the cumulative contract fields.
+    """
+    frame = pd.DataFrame(
+        {
+            "project_id": ["P01", "P01", "P01"],
+            "time_period": ["Month-1", "Month-2", "Month-3"],
+            "pmb_budget": [100.0, 200.0, 300.0],
+            "actual_cost": [50.0, 40.0, 150.0],  # Month-2 falls below Month-1
+            "progress_pct": [16.67, 33.33, 50.0],
+            "revenue_claimed": [50.0, 100.0, 150.0],
+            "actual_date": pd.to_datetime(
+                ["2011-04-01", "2011-05-01", "2011-06-01"]
+            ),
+            "baseline_start_date": pd.to_datetime(["2011-04-01"] * 3),
+        }
+    )
+    result = validator.validate(frame, tier="derived")
     assert "R9" in result.findings_by_rule()
 
 
 def test_incremental_matches_batch_for_same_records(fixtures):
-    """Dual-mode consistency: identical flags in both modes."""
+    """multi-mode consistency: identical flags in both modes."""
     from data_quality.pipeline.runner import DataPipeline
 
     batch = DataPipeline().process_batch(fixtures.regression, tier="raw")

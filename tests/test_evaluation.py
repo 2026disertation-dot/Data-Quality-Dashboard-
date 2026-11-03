@@ -75,7 +75,7 @@ def test_derived_contract_has_the_eight_specified_fields(evaluation):
 
 def test_detection_completeness_meets_target(evaluation):
     detection = evaluation.detection
-    assert detection["injected"] == 250
+    assert detection["injected"] == 280
     assert detection["completeness_pct"] >= DETECTION_TARGET
     assert detection["detected"] + detection["missed"] == detection["injected"]
 
@@ -87,14 +87,14 @@ def test_every_injected_rule_is_exercised(evaluation):
 
 def test_false_positive_rate_meets_target(evaluation):
     fp = evaluation.false_positives
-    assert fp["clean_records"] == 500
+    assert fp["clean_records"] == 200
     assert fp["rate_pct"] <= FALSE_POSITIVE_TARGET
 
 
-def test_dual_mode_consistency_is_total(evaluation):
-    assert evaluation.dual_mode["consistent"] is True
-    assert evaluation.dual_mode["consistency_pct"] == 100.0
-    assert evaluation.dual_mode["batch_invalid"] == evaluation.dual_mode["incremental_invalid"]
+def test_multi_mode_consistency_is_total(evaluation):
+    assert evaluation.multi_mode["consistent"] is True
+    assert evaluation.multi_mode["consistency_pct"] == 100.0
+    assert evaluation.multi_mode["batch_invalid"] == evaluation.multi_mode["incremental_invalid"]
 
 
 def test_batch_validation_is_not_pathological(evaluation):
@@ -131,11 +131,13 @@ def test_dimension_scores_are_bounded(evaluation):
         assert 0.0 <= value <= 100.0
 
 
-def test_real_data_findsings_are_r9_and_r14_only(evaluation):
+def test_real_data_findings_are_r9_and_r14_only(evaluation):
     """The genuine defects, honestly reported.
 
-    The source workbooks are structurally consistent, so only the cumulative
-    rule fires on the raw tier, and only the progress rule on the derived tier.
+    The source workbooks are structurally consistent, so the WBS-level tier
+    (R1-R7, R10-R12) returns nothing.  Only the cumulative and progress rules
+    fire on the project-period tier: a single cumulative decrease (R9) and the
+    records whose spend has outrun the progress they report (R14).
     """
-    assert set(evaluation.rules_observed["raw"]) == {"R9"}
-    assert set(evaluation.rules_observed["derived"]) == {"R14"}
+    assert set(evaluation.rules_observed["raw"]) == set()
+    assert set(evaluation.rules_observed["derived"]) == {"R9", "R14"}

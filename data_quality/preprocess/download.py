@@ -523,6 +523,16 @@ def download_and_format_dataset(dataset=DEFAULT_DATASET, local_dir=None, output=
         f"\nExtracted {len(combined)} cumulative EVM records "
         f"across {combined['project_id'].nunique()} project(s)."
     )
+    
+    # Log data preparation details per Section 3.3.3
+    print("\nData Preparation Log:")
+    print("=" * 60)
+    print(f"Total source cost records read: {len(combined)}")
+    print(f"Projects processed: {combined['project_id'].nunique()}")
+    print(f"WBS codes: {combined['wbs_code'].nunique()}")
+    print(f"Reporting periods: {combined['period_index'].nunique()}")
+    print(f"Date range: {combined['period_date'].min()} to {combined['period_date'].max()}")
+    print("=" * 60)
 
     if output:
         output_dir = os.path.dirname(output)

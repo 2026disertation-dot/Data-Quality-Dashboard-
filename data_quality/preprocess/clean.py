@@ -9,11 +9,14 @@ one row per project x reporting month x Portfolio WBS line, carrying the
 The dashboard's contract is time-phased - one record per project and reporting
 period - so this module performs the business transformation in four steps:
 
-1. **Aggregate** the Portfolio WBS lines up to the project level, summing the
-   cumulative EVM figures for each reporting month.
-2. **De-cumulativise** PV / AC / EV into period movements by differencing each
-   project's cumulative series.  This is what turns a monthly earned value
-   snapshot into a period budget and period cost.
+1. **Aggregate** the leaf-level Portfolio WBS lines up to the project level,
+   summing the cumulative EVM figures for each reporting month (parent-level
+   rows are filtered out first so they are not double-counted).
+2. **Store** the aggregated PV / AC / EV directly as the cumulative contract
+   fields ``pmb_budget``, ``actual_cost`` and ``revenue_claimed``.  Validation
+   consumes cumulative values so that R9 checks cumulative monotonicity on the
+   project-period view; period movements are derived on the fly by the
+   dashboard for display only.
 3. **Derive** the remaining contract fields:
    ``time_period`` (``Month-<n>``, mirroring the ``Week-<n>`` convention used by
    the sample generator), ``progress_pct`` (cumulative earned value as a
@@ -102,19 +105,26 @@ class CleaningReport:
         return "\n".join(lines)
 
 
-def de_cumulativise(values):
+def de_cumulativise(values, confirmed_revision: bool = False):
     """
     Convert a cumulative series into period movements.
 
+    This helper is used for dashboard display only.  The validation pipeline
+    always consumes the stored cumulative values, so that R9 checks cumulative
+    monotonicity (Chapter 4, Challenge 6).
+
+    Negative movements are retained for display unless the decrease has been
+    explicitly confirmed as a historical revision, in which case the movement is
+    floored at zero.
+
     Args:
         values: Cumulative values ordered from the first reporting period.
+        confirmed_revision: If True, negative movements are floored at zero.
 
     Returns:
-        tuple: ``(period_values, negative_count)`` where ``period_values`` is a
-        float Series of period movements and ``negative_count`` counts the
-        movements that were negative before clipping.  A decreasing cumulative
-        series means the source workbook revised history, so the movement is
-        floored at zero and counted for reporting.
+        tuple: (period_values, negative_count) where period_values is a
+        float Series of period movements and negative_count counts the
+        movements that were negative before clipping.
     """
     cumulative = pd.to_numeric(values, errors="coerce").astype(float)
     cumulative = cumulative.reset_index(drop=True)
@@ -127,19 +137,29 @@ def de_cumulativise(values):
         periods.iloc[0] = cumulative.iloc[0]
 
     negative_count = int((periods < 0).sum())
-    return periods.clip(lower=0.0), negative_count
+
+    # Only floor if explicitly confirmed as a historical revision
+    if confirmed_revision:
+        periods = periods.clip(lower=0.0)
+
+    return periods, negative_count
 
 
 def build_project_totals(long_df):
     """
-    Collapse the WBS-level EVM time-phase to one cumulative row per project and month.
+    Collapse the leaf-level WBS EVM time-phase to one cumulative row per
+    project and period.
+
+    Leaf-level filtering ensures parent-level rows (which already aggregate
+    their children) are excluded, preventing double-counting (Section 3.3.4
+    of Chapter 3).
 
     Args:
         long_df: Long-format frame as produced by ``download_kaggle_data.py``.
 
     Returns:
         pd.DataFrame: Columns ``project_id``, ``period_date``, ``pv_cum``,
-        ``ac_cum``, ``ev_cum`` - one row per project and reporting month.
+        ``ac_cum``, ``ev_cum`` - one cumulative row per project and period.
 
     Raises:
         ValueError: If a required source column is missing.
@@ -153,6 +173,28 @@ def build_project_totals(long_df):
     work = long_df.copy()
     work["project_id"] = work["project_id"].astype(str).str.strip()
     work["period_date"] = pd.to_datetime(work["period_date"], errors="coerce")
+
+    # --- Leaf-level filter (Section 3.3.4) ---
+    # A leaf-level record has no subordinate WBS code.  Where a WBS code is a
+    # strict prefix of another code in the same project (for example "1" above
+    # "1.2"), the shorter code is a parent that already aggregates its children,
+    # so summing both would double-count.  Parent-level rows are excluded.
+    if "wbs_code" in work.columns:
+        codes = work["wbs_code"].astype(str)
+        has_children = codes.groupby(work["project_id"]).transform(
+            lambda series: series.apply(
+                lambda code: any(
+                    other != code and other.startswith(code + ".")
+                    for other in series
+                )
+            )
+        )
+        work = work[~has_children]
+
+    # Parent-level rows can also arrive with empty cumulative values; a record
+    # without a cumulative figure cannot contribute to a project total.
+    work = work.dropna(subset=["pv_cum", "ac_cum", "ev_cum"])
+
     for column in ("pv_cum", "ac_cum", "ev_cum"):
         work[column] = pd.to_numeric(work[column], errors="coerce").fillna(0.0)
 
@@ -160,12 +202,14 @@ def build_project_totals(long_df):
     # time axis, so it cannot become a time-phased contract record either.
     work = work[work["project_id"].ne("") & work["period_date"].notna()]
 
+    # Sum LEAF-LEVEL cumulative values only.
     totals = (
         work.groupby(["project_id", "period_date"], as_index=False)[["pv_cum", "ac_cum", "ev_cum"]]
         .sum()
         .sort_values(["project_id", "period_date"])
         .reset_index(drop=True)
     )
+    totals.attrs["leaf_records"] = len(work)
     totals.attrs["wbs_lines"] = int(work["wbs_code"].nunique()) if "wbs_code" in work.columns else 0
     totals.attrs["dropped_rows"] = len(long_df) - len(work)
     return totals
@@ -173,7 +217,12 @@ def build_project_totals(long_df):
 
 def transform_to_contract(long_df, time_period_prefix=TIME_PERIOD_PREFIX, round_to=ROUND_TO):
     """
-    Transform long-format cumulative EVM data into the dashboard data contract.
+    Transform leaf-level cumulative EVM data into the derived data contract.
+
+    The derived contract stores CUMULATIVE values so that Rule R9 (cumulative
+    monotonicity) can be applied on the project-period view, consistent with
+    Chapter 4 Code Block 4.1 and Challenge 6.  Period movements are computed
+    separately by the dashboard for visualisation when needed.
 
     Args:
         long_df: Long-format frame as produced by ``download_kaggle_data.py``.
@@ -204,20 +253,25 @@ def transform_to_contract(long_df, time_period_prefix=TIME_PERIOD_PREFIX, round_
         # workbook lists its reporting months out of order.
         period_index = pd.Series(range(1, len(group) + 1), index=group.index)
 
-        pmb_budget, neg_pmb = de_cumulativise(group["pv_cum"])
-        actual_cost, neg_cost = de_cumulativise(group["ac_cum"])
-        revenue_claimed, neg_revenue = de_cumulativise(group["ev_cum"])
-        report.negative_diffs += neg_pmb + neg_cost + neg_revenue
+        pmb_budget = (
+            pd.to_numeric(group["pv_cum"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        )
+        actual_cost = (
+            pd.to_numeric(group["ac_cum"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        )
+        revenue_claimed = (
+            pd.to_numeric(group["ev_cum"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        )
 
         # The performance measurement baseline is the highest planned value the
         # project reaches, i.e. its planned value at completion.
-        baseline = float(group["pv_cum"].max())
+        baseline = float(pmb_budget.max())
         report.baselines[project_id] = round(baseline, round_to)
 
         if baseline > 0:
-            progress_raw = group["ev_cum"].to_numpy(dtype=float) / baseline * 100.0
+            progress_raw = revenue_claimed.to_numpy(dtype=float) / baseline * 100.0
         else:
-            progress_raw = group["ev_cum"].to_numpy(dtype=float) * 0.0
+            progress_raw = revenue_claimed.to_numpy(dtype=float) * 0.0
         report.progress_clipped += int(((progress_raw < 0) | (progress_raw > 100)).sum())
 
         frames.append(
@@ -325,6 +379,15 @@ def clean_and_transform_kaggle_data(source=DEFAULT_SOURCE, output=DEFAULT_OUTPUT
     print(report.describe())
     print("-" * 46)
     print("Data contract validation: PASSED")
+    
+    # Log aggregation details per Section 3.3.4
+    print("\nAggregation Log (Section 3.3.4):")
+    print("=" * 60)
+    print(f"Source WBS-level records: {report.source_records}")
+    print(f"Leaf-level records retained: {report.source_records - report.dropped_rows}")
+    print(f"Parent-level records excluded: {report.dropped_rows}")
+    print(f"Project-period view rows: {report.records}")
+    print("=" * 60)
 
     if output:
         output_dir = os.path.dirname(output)

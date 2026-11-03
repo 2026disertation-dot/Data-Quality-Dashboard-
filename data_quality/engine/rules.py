@@ -96,16 +96,6 @@ RULE_CATALOGUE: dict[str, dict[str, str]] = {
         "dimension": "consistency",
         "example": "P01 records attributed to the P02 workbook",
     },
-    "R13": {
-        "rule": "Cumulative actual cost must stay within 3x cumulative budget",
-        "dimension": "integrity",
-        "example": "Project running far beyond its planned baseline",
-    },
-    "R14": {
-        "rule": "Cumulative spend must not exceed reported progress by more than 0.5",
-        "dimension": "integrity",
-        "example": "Spend at 90% of budget while reporting 40% progress",
-    },
     "R12": {
         "rule": "wbs_code must carry a non-empty description",
         "dimension": "completeness",
@@ -114,12 +104,12 @@ RULE_CATALOGUE: dict[str, dict[str, str]] = {
     "R13": {
         "rule": "Cumulative actual cost must stay within 3x cumulative budget",
         "dimension": "integrity",
-        "example": "Running cost position exceeds the agreed multiple",
+        "example": "Project running far beyond its planned baseline",
     },
     "R14": {
         "rule": "Cumulative spend must not outrun reported progress",
         "dimension": "integrity",
-        "example": "Cost ratio exceeds progress_pct plus tolerance",
+        "example": "Spend at 90% of budget while reporting 40% progress",
     },
 }
 
@@ -131,7 +121,7 @@ def rule_dimension(rule_id: str) -> str:
 
 def _finding(rule_id: str, key: str, field: str, description: str, remediation: str) -> Finding:
     """Build a :class:`Finding` with the rule's declared dimension and severity."""
-    from .findings import SEVERITY
+    from .findings import rule_severity
 
     dimension = RULE_CATALOGUE[rule_id]["dimension"]
     return Finding(
@@ -139,7 +129,7 @@ def _finding(rule_id: str, key: str, field: str, description: str, remediation: 
         dimension=dimension,
         record_key=key,
         field=field,
-        severity=SEVERITY[dimension],
+        severity=rule_severity(rule_id),
         description=description,
         remediation=remediation,
     )
@@ -188,8 +178,8 @@ def _readable_as_date(value) -> bool:
 
 
 def make_finding(rule_id: str, key: str, field: str, description: str, remediation: str) -> Finding:
-    """Build a :class:`Finding` carrying the rule's declared dimension."""
-    from .findings import SEVERITY
+    """Build a :class:`Finding` carrying the rule's declared dimension and severity."""
+    from .findings import rule_severity
 
     dimension = RULE_CATALOGUE[rule_id]["dimension"]
     return Finding(
@@ -197,7 +187,7 @@ def make_finding(rule_id: str, key: str, field: str, description: str, remediati
         dimension=dimension,
         record_key=key,
         field=field,
-        severity=SEVERITY[dimension],
+        severity=rule_severity(rule_id),
         description=description,
         remediation=remediation,
     )

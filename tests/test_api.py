@@ -67,7 +67,10 @@ def test_malformed_json_rejected(client):
         "/validate", data="not json", content_type="application/json"
     )
     assert response.status_code == 422
-    assert response.get_json()["error"] == "malformed_request"
+    body = response.get_json()
+    assert body["rule"] == "malformed_request"
+    assert body["title"] == "Malformed request"
+    assert response.headers["Content-Type"] == "application/problem+json"
 
 
 def test_status_does_not_validate(client, good_record):
@@ -83,7 +86,7 @@ def test_flagged_records_are_captured(client, good_record):
     assert body["count"] >= 1
     entry = body["flagged_records"][0]
     assert entry["rule_id"] == "R4"
-    assert entry["error"] == "out_of_bounds_value"
+    assert entry["error"] == "value_outside_permitted_range"
     assert entry["remediation"]
 
 

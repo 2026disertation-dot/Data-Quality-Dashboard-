@@ -23,14 +23,10 @@ import pandas as pd
 from .findings import Finding
 from .rules import _finding, record_key
 
-#: Ratio tolerance allowed between cumulative spend and reported progress
-#: before R14 flags a period.  Expressed in ratio terms (0.5 = 50%).
-PROGRESS_TOLERANCE = 0.5
+#: Fraction by which cumulative spend may exceed the spend implied by reported
+#: progress before R14 treats a period as a mismatch (spec default 20%).
+PROGRESS_TOLERANCE = 0.20
 
-
-#: Tolerance, in ratio terms, allowed between cumulative spend and reported
-#: progress before rule R14 treats a period as a mismatch.
-PROGRESS_TOLERANCE = 0.5
 #: Largest multiple of cumulative budget tolerated before R13 flags a period.
 BUDGET_OVERRUN_MULTIPLE = 3.0
 
@@ -85,27 +81,60 @@ def rule_r7_wbs_description_consistency(
 
 
 def rule_r8_date_ordering(
-    df: pd.DataFrame, key_columns: list[str], group_columns: list[str]
+    df: pd.DataFrame, key_columns: list[str], group_columns: list[str] | None = None
 ) -> list[Finding]:
-    """R8: period_date must increase with period_index inside each series."""
+    """R8: reporting dates must increase with the reporting period.
+
+    R8 is a project-period rule (Chapter 3 Table 3.9): on the derived tier the
+    periods are ordered by their ``time_period`` label and ``actual_date`` must
+    not move backwards.  The WBS-level shape (ordered by ``period_index``,
+    carrying ``period_date``) is handled as well, so the same function can be
+    exercised directly by the unit tests.
+    """
     findings: list[Finding] = []
+
+    # -- derived / project-period view ----------------------------------
+    if {"actual_date", "time_period"} <= set(df.columns):
+        present = [c for c in (group_columns or ["project_id"]) if c in df.columns]
+        for _, group in df.groupby(present):
+            ordered = group.assign(
+                _order=_natural_keys(group["time_period"])
+            ).sort_values("_order", kind="stable")
+            dates = pd.to_datetime(ordered["actual_date"], errors="coerce")
+            for i in range(1, len(ordered)):
+                current, previous = dates.iloc[i], dates.iloc[i - 1]
+                if pd.notna(current) and pd.notna(previous) and current < previous:
+                    row = ordered.iloc[i]
+                    findings.append(
+                        _finding(
+                            "R8",
+                            record_key(row, key_columns),
+                            "actual_date",
+                            f"actual_date {current:%Y-%m-%d} precedes the "
+                            f"{previous:%Y-%m-%d} reported at the previous period",
+                            "Correct actual_date to maintain chronological order",
+                        )
+                    )
+        return findings
+
+    # -- WBS-level fallback ----------------------------------------------
+    group_columns = group_columns or ["project_id", "wbs_code"]
     needed = set(group_columns) | {"period_date", "period_index"}
     if not needed <= set(df.columns):
         return findings
     present = [c for c in group_columns if c in df.columns]
     for _, group in df.groupby(present):
         ordered = group.sort_values("period_index")
-        if ordered["period_date"].is_monotonic_increasing:
-            continue
         dates = pd.to_datetime(ordered["period_date"], errors="coerce")
         previous = dates.shift(1)
-        for _, row in ordered[dates < previous].iterrows():
+        for position in dates.index[dates < previous]:
+            row = ordered.loc[position]
             findings.append(
                 _finding(
                     "R8",
                     record_key(row, key_columns),
                     "period_date",
-                    f"period_date {row['period_date']:%Y-%m-%d} precedes the "
+                    f"period_date {dates.loc[position]:%Y-%m-%d} precedes the "
                     "previous period in the same series",
                     "Verify period date ordering",
                 )
@@ -115,91 +144,103 @@ def rule_r8_date_ordering(
 def rule_r9_cumulative_monotonicity(
     df: pd.DataFrame,
     key_columns: list[str],
-    group_columns: list[str],
-    value_columns: list[str],
+    group_columns: list[str] | None = None,
+    value_columns: list[str] | None = None,
 ) -> list[Finding]:
     """R9: a cumulative series must never fall.
 
-    This is the only rule that genuinely requires historical context: each
-    running total is defined by everything reported before it, so a restatement
-    or a duplicated snapshot is visible here and nowhere else.
-
-    On the real dataset this flags 21 series across 22 decreasing steps - for
-    example P05/WBS 81, where ``ev_cum`` falls from 41,052.64 to 40,860.36 at
-    period 8 and stays below the earlier total until period 12.  A cumulative
-    earned-value series cannot decrease, so these are genuine defects rather
-    than artefacts of the analysis.
+    This is a project-period rule (Chapter 3 Table 3.9).  Periods are placed in
+    reporting order and every cumulative column must be non-decreasing; a
+    restatement that falls below the previous period is the defect R9 exists to
+    catch.  On the derived tier the columns are the cumulative contract fields
+    ``pmb_budget``, ``actual_cost`` and ``revenue_claimed`` (Chapter 4
+    Challenge 6).  The WBS-level shape (ordered by ``period_index``) is handled
+    too so the function can be exercised directly by the unit tests.
     """
     findings: list[Finding] = []
-    needed = set(group_columns) | {"period_index"} | set(value_columns)
-    if not needed <= set(df.columns):
-        return findings
+    group_columns = group_columns or ["project_id"]
     present = [c for c in group_columns if c in df.columns]
+    if not present:
+        return findings
+
+    if "period_index" in df.columns:
+        by_label = False
+        if value_columns is None:
+            value_columns = ["pv_cum", "ac_cum", "ev_cum"]
+    elif "time_period" in df.columns:
+        by_label = True
+        if value_columns is None:
+            value_columns = ["pmb_budget", "actual_cost", "revenue_claimed"]
+    else:
+        return findings
+
     for _, group in df.groupby(present):
-        ordered = group.sort_values("period_index")
+        if by_label:
+            ordered = group.assign(
+                _order=_natural_keys(group["time_period"])
+            ).sort_values("_order", kind="stable")
+            labels = ordered["time_period"].tolist()
+        else:
+            ordered = group.sort_values("period_index", kind="stable")
+            labels = ordered["period_index"].tolist()
+
         for column in value_columns:
+            if column not in ordered.columns:
+                continue
             series = pd.to_numeric(ordered[column], errors="coerce")
-            delta = series.diff()
-            previous_period = ordered["period_index"].shift(1)
-            for position in delta.index[delta < 0]:
-                # A negative delta at position P means series[P] < series[P-1]:
-                # P is the restated record, so the finding belongs to P.  The
-                # previous period is the baseline it wrongly undercuts.
-                row = ordered.loc[position]
-                findings.append(
-                    _finding(
-                        "R9",
-                        record_key(row, key_columns),
-                        column,
-                        f"{column} is {row[column]:,.2f} at period_index "
-                        f"{row['period_index']}, below the "
-                        f"{series.shift(1).loc[position]:,.2f} reported at "
-                        f"period_index {previous_period.loc[position]}",
-                        f"Correct the {column} restatement",
+            for i in range(1, len(ordered)):
+                current, previous = series.iloc[i], series.iloc[i - 1]
+                if pd.isna(current) or pd.isna(previous):
+                    continue
+                if current < previous:
+                    # The falling record is the restatement, so the finding
+                    # belongs to it; the previous period is the baseline it
+                    # wrongly undercuts.
+                    row = ordered.iloc[i]
+                    findings.append(
+                        _finding(
+                            "R9",
+                            record_key(row, key_columns),
+                            column,
+                            f"{column} fell from {previous:,.2f} at "
+                            f"{labels[i - 1]} to {current:,.2f} at {labels[i]}",
+                            f"Correct the {column} restatement so it does not decrease",
+                        )
                     )
-                )
     return findings
 
 
 def rule_r13_budget_overrun(
-    df: pd.DataFrame, key_columns: list[str], multiple: float = 3.0
+    df: pd.DataFrame, key_columns: list[str], multiple: float = BUDGET_OVERRUN_MULTIPLE
 ) -> list[Finding]:
     """R13: cumulative actual cost must stay within ``multiple`` x budget.
 
-    A reporting period with no planned budget is not an unlimited overrun: the
-    plan may already have been spent while costs are still being incurred, so the
-    period is judged on the cumulative position of its project.  Periods whose
-    project has no budget at all cannot be evaluated and are not flagged.
-
-    This rule needs the running total, so it is a derived-tier rule: it reads
-    cumulative sums built from period movements.
+    The derived contract stores cumulative figures, so each row already carries
+    the project's cumulative actual cost and cumulative planned budget; the rule
+    compares them directly (Chapter 4 Code Block 4.5).  A period with no planned
+    budget cannot be judged and is not flagged.
     """
     findings: list[Finding] = []
-    needed = {"project_id", "pmb_budget", "actual_cost"}
+    needed = {"actual_cost", "pmb_budget"}
     if not needed <= set(df.columns):
         return findings
 
-    ordered = _in_period_order(df)
-    for _, group in ordered.groupby("project_id"):
-        cumulative_budget = _running_total(group, "pmb_budget")
-        cumulative_actual = _running_total(group, "actual_cost")
-        for position in group.index:
-            budget = cumulative_budget.loc[position]
-            actual = cumulative_actual.loc[position]
-            if budget <= 0:
-                continue  # nothing to compare against
-            if actual > budget * multiple:
-                row = group.loc[position]
-                findings.append(
-                    _finding(
-                        "R13",
-                        "|".join(str(row.get(c, "")) for c in key_columns),
-                        "actual_cost",
-                        f"cumulative actual cost {actual:,.2f} exceeds "
-                        f"{multiple:g}x cumulative budget {budget:,.2f}",
-                        "Review the cost overrun or the project baseline",
-                    )
+    for _, row in df.iterrows():
+        actual = row["actual_cost"]
+        budget = row["pmb_budget"]
+        if pd.isna(actual) or pd.isna(budget) or budget <= 0:
+            continue
+        if actual > budget * multiple:
+            findings.append(
+                _finding(
+                    "R13",
+                    record_key(row, key_columns),
+                    "actual_cost",
+                    f"Cumulative actual cost {actual:,.2f} exceeds "
+                    f"{multiple:g}x cumulative budget {budget:,.2f}",
+                    "Review cost allocation against the PMB",
                 )
+            )
     return findings
 
 
@@ -208,68 +249,38 @@ def rule_r14_progress_mismatch(
 ) -> list[Finding]:
     """R14: cumulative spend must not outrun reported progress.
 
-    ``progress_pct`` is cumulative completion, so it is compared against the
-    cumulative cost-to-budget ratio.  Comparing it with a single period's
-    figures would mix two different bases and flag every period of a project
-    that is spending ahead of its curve.
-
-    This is the rule that surfaces the genuine findings in the real dataset:
-    17 of the 76 project records spend faster than the progress they report.
+    ``progress_pct`` is cumulative completion, so the expected spend at that
+    progress is ``pmb_budget x progress_pct/100``.  A period is flagged when the
+    cumulative actual cost exceeds that expectation by more than ``tolerance``
+    (the spec default is 20%, Chapter 4 Code Block 4.5).
     """
     findings: list[Finding] = []
-    needed = {"project_id", "pmb_budget", "actual_cost", "progress_pct"}
+    needed = {"actual_cost", "pmb_budget", "progress_pct"}
     if not needed <= set(df.columns):
         return findings
 
-    ordered = _in_period_order(df)
-    for _, group in ordered.groupby("project_id"):
-        cumulative_budget = _running_total(group, "pmb_budget")
-        cumulative_actual = _running_total(group, "actual_cost")
-        progress = pd.to_numeric(group["progress_pct"], errors="coerce").fillna(0.0) / 100.0
-        ratio = cumulative_actual / cumulative_budget.where(cumulative_budget > 0)
-        for position in group.index:
-            budget = cumulative_budget.loc[position]
-            if pd.isna(budget) or budget <= 0:
-                continue
-            spent = ratio.loc[position]
-            reported = progress.loc[position]
-            if pd.isna(spent):
-                continue
-            if spent > reported + tolerance:
-                row = group.loc[position]
-                findings.append(
-                    _finding(
-                        "R14",
-                        "|".join(str(row.get(c, "")) for c in key_columns),
-                        "progress_pct",
-                        f"cumulative spend is {spent:.1%} of budget but "
-                        f"reported progress is {reported:.1%}",
-                        "Verify reported progress against actual expenditure",
-                    )
+    for _, row in df.iterrows():
+        actual = row["actual_cost"]
+        budget = row["pmb_budget"]
+        progress = row["progress_pct"]
+        if pd.isna(actual) or pd.isna(budget) or pd.isna(progress):
+            continue
+        if budget <= 0:
+            continue
+        expected_max_spend = budget * (progress / 100.0)
+        if actual > expected_max_spend * (1.0 + tolerance):
+            findings.append(
+                _finding(
+                    "R14",
+                    record_key(row, key_columns),
+                    "actual_cost",
+                    f"Actual cost {actual:,.2f} exceeds expected spend "
+                    f"{expected_max_spend:,.2f} for {progress:g}% progress "
+                    f"(tolerance {tolerance * 100:.0f}%)",
+                    "Review cost allocation or progress reporting",
                 )
+            )
     return findings
-
-
-def _in_period_order(df: pd.DataFrame) -> pd.DataFrame:
-    """Sort a derived frame into reporting order.
-
-    Period labels such as ``Month-10`` must not sort as plain strings, or the
-    running totals are computed over the wrong sequence.  When ``actual_date``
-    is available it is authoritative; otherwise a natural sort on the label is
-    used.
-    """
-    if "actual_date" in df.columns:
-        dates = pd.to_datetime(df["actual_date"], errors="coerce")
-        if dates.notna().any():
-            return df.assign(_order=dates).sort_values(["project_id", "_order"], kind="stable")
-    keys = _natural_keys(df.get("time_period"))
-    return df.assign(_order=keys).sort_values(["project_id", "_order"], kind="stable")
-
-
-def _running_total(group: pd.DataFrame, column: str) -> pd.Series:
-    """Cumulative sum of a period movement column within one project."""
-    values = pd.to_numeric(group[column], errors="coerce").fillna(0.0)
-    return values.cumsum()
 
 
 def _natural_keys(periods) -> pd.Series:

@@ -30,13 +30,36 @@ from typing import Any, Iterable, Sequence
 #: Data quality dimension assigned to each rule, per Table 3.2.
 DIMENSIONS = ("completeness", "consistency", "accuracy", "integrity")
 
-#: Severity attached to each dimension.
-SEVERITY = {
-    "completeness": "high",
-    "consistency": "medium",
-    "accuracy": "medium",
-    "integrity": "high",
+#: Severity attached to each rule, per Table 4.3.
+#:
+#: Severity is High where the defect prevents meaningful validation (R1, R2,
+#: R12 - structural failures) or directly corrupts cumulative variance (R8, R9);
+#: Medium otherwise.  Severity orders findings for display (see
+#: :func:`_most_severe_finding`); it does not decide the HTTP outcome on its own.
+#: Only the structural rules (R1, R2, R12) reject the record with 422; every
+#: other finding, including the domain rules R8 and R9 whose severity is High,
+#: quarantines the record with 202 (see the API section, Table 4.4).
+RULE_SEVERITY = {
+    "R1": "high",
+    "R2": "high",
+    "R3": "medium",
+    "R4": "medium",
+    "R5": "medium",
+    "R6": "medium",
+    "R7": "medium",
+    "R8": "high",
+    "R9": "high",
+    "R10": "medium",
+    "R11": "medium",
+    "R12": "high",
+    "R13": "medium",
+    "R14": "medium",
 }
+
+
+def rule_severity(rule_id: str) -> str:
+    """Return the severity declared for a rule in Table 4.3."""
+    return RULE_SEVERITY.get(rule_id, "medium")
 
 
 @dataclass(frozen=True)

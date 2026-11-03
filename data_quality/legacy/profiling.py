@@ -31,6 +31,7 @@ import os
 import pandas as pd
 
 from data_quality.legacy.contract import get_contract_specification
+from data_quality.preprocess.clean import de_cumulativise
 
 # Real, cleaned dataset produced by data_quality/preprocess/clean.py
 DEFAULT_CLEANED = os.path.join("data", "kaggle_cleaned_data.csv")
@@ -68,6 +69,92 @@ CONTRACT_NUMERIC_FIELDS = [
 
 # The contract's declared date fields
 CONTRACT_DATE_FIELDS = ["actual_date", "baseline_start_date"]
+
+# The money columns the derived contract stores cumulatively.  The descriptive
+# tables in the research report present them as period movements instead.
+DISPLAY_CUMULATIVE_COLUMNS = ["pmb_budget", "actual_cost", "revenue_claimed"]
+
+
+def _period_order(series):
+    """
+    Numeric suffix of a ``Month-<n>`` label, for ordering by reporting period.
+
+    ``Month-10`` sorts before ``Month-2`` as plain text, so the suffix is pulled
+    out and coerced to a number.  Labels without a numeric suffix become NaN.
+
+    Args:
+        series: The ``time_period`` values.
+
+    Returns:
+        pd.Series: The numeric period index, aligned to ``series``.
+    """
+    return pd.to_numeric(series.astype(str).str.rpartition("-")[2], errors="coerce")
+
+
+def period_movements(df):
+    """
+    Express the cumulative money columns as per-period movements.
+
+    The derived contract stores ``pmb_budget``, ``actual_cost`` and
+    ``revenue_claimed`` cumulatively so that the validator can check cumulative
+    monotonicity (Challenge 6).  The descriptive tables and figures in the
+    research report are stated as *period movements*, so this helper
+    de-cumulativises the money columns on the display path only; the validation
+    path always consumes the stored cumulative values.
+
+    Movements are computed in reporting order - the numeric suffix of the
+    ``Month-<n>`` label rather than the row order - and a decrease is floored at
+    zero, because such a decrease is a restatement of an earlier cumulative
+    figure rather than a negative period of work.
+
+    Args:
+        df: The cleaned cost records carrying the stored cumulative values.
+
+    Returns:
+        pd.DataFrame: A copy with the money columns replaced by movements.
+    """
+    if df is None or df.empty or not {"project_id", "time_period"}.issubset(df.columns):
+        return df
+
+    frame = df.copy()
+    frame = frame.assign(_period_order=_period_order(frame["time_period"]))
+
+    for column in DISPLAY_CUMULATIVE_COLUMNS:
+        if column not in frame.columns:
+            continue
+        movements = pd.Series(float("nan"), index=frame.index, dtype=float)
+        ordered = frame.sort_values("_period_order", kind="stable")
+        for _, group in ordered.groupby("project_id", sort=False):
+            values, _ = de_cumulativise(group[column], confirmed_revision=True)
+            movements.loc[group.index] = values.to_numpy()
+        frame[column] = movements
+
+    return frame.drop(columns=["_period_order"])
+
+
+def _natural_period_bounds(series):
+    """
+    Earliest and latest period labels, ordered by their numeric suffix.
+
+    ``time_period`` labels sort incorrectly as plain strings (``Month-10``
+    precedes ``Month-2``), so the range is reported in reporting order.
+
+    Args:
+        series: The ``time_period`` values.
+
+    Returns:
+        tuple: ``(earliest, latest)`` labels, falling back to the lexical
+        minimum and maximum when no numeric suffix is present.
+    """
+    numbered = {}
+    for label in series.dropna().astype(str):
+        suffix = label.rpartition("-")[2]
+        if suffix.isdigit():
+            numbered[label] = int(suffix)
+    if not numbered:
+        return series.min(), series.max()
+    ordered = sorted(numbered.items(), key=lambda item: item[1])
+    return ordered[0][0], ordered[-1][0]
 
 
 def load_cleaned_data(path=DEFAULT_CLEANED):
@@ -119,6 +206,10 @@ def profile_frame(df):
     "format conflicts" column is the important one for the cleaning chapter: it
     counts the cells a spreadsheet would have to coerce on import.
 
+    The money columns are described as period movements, matching the
+    descriptive tables in the research report; ``time_period`` is reported in
+    reporting order so ``Month-14`` is recognised as the latest period.
+
     Args:
         df: The frame to profile.
 
@@ -126,11 +217,12 @@ def profile_frame(df):
         pd.DataFrame: One row per contract column, indexed by column name.
     """
     required = get_contract_specification()["required_fields"]
+    display = period_movements(df)
     rows = {}
     total = max(len(df), 1)
 
     for column in required:
-        if column not in df.columns:
+        if column not in display.columns:
             rows[column] = {
                 "dtype": "ABSENT",
                 "non_null": 0,
@@ -143,7 +235,7 @@ def profile_frame(df):
             }
             continue
 
-        series = df[column]
+        series = display[column]
         non_null = int(series.notna().sum())
         missing = int(series.isna().sum())
 
@@ -160,7 +252,10 @@ def profile_frame(df):
             low, high = parsed.min(), parsed.max()
         else:
             conflicts = 0
-            low, high = series.min(), series.max()
+            if column == "time_period":
+                low, high = _natural_period_bounds(series)
+            else:
+                low, high = series.min(), series.max()
 
         rows[column] = {
             "dtype": str(series.dtype),
@@ -292,6 +387,12 @@ def project_summary(df):
     """
     Per-project cost summary, ordered by project identifier.
 
+    The money totals are the sum of the project's period movements (the
+    cumulative money columns de-cumulativised), so they match the descriptive
+    tables in the research report rather than re-summing cumulative snapshots.
+    ``final_progress_pct`` is the progress of the project's latest reporting
+    period, so the frame is ordered by period before the last row is taken.
+
     Args:
         df: The cleaned cost records.
 
@@ -301,7 +402,15 @@ def project_summary(df):
     if df.empty or "project_id" not in df.columns:
         return pd.DataFrame()
 
-    grouped = df.groupby("project_id", as_index=False).agg(
+    display = period_movements(df)
+    # The CSV does not guarantee period order (P05, P06 and P17 list Months
+    # 10-14 before Months 2-9), so the frame is sorted by the period's numeric
+    # suffix before the last row supplies ``final_progress_pct``; otherwise a
+    # completed project would report an out-of-date interim progress.
+    display = display.assign(
+        _period_order=_period_order(display["time_period"])
+    ).sort_values(["project_id", "_period_order"], kind="stable")
+    grouped = display.groupby("project_id", as_index=False).agg(
         periods=("time_period", "size"),
         first_reporting=("actual_date", "min"),
         last_reporting=("actual_date", "max"),
@@ -323,6 +432,9 @@ def summary_statistics_table(df, columns=None):
     """
     Descriptive statistics for the numeric cost columns.
 
+    The money columns are summarised as period movements, matching the
+    descriptive tables in the research report; ``progress_pct`` is unchanged.
+
     Args:
         df: The cleaned cost records.
         columns: Columns to summarise. Defaults to the money and progress fields.
@@ -334,12 +446,13 @@ def summary_statistics_table(df, columns=None):
     if columns is None:
         columns = CONTRACT_NUMERIC_FIELDS
 
+    display = period_movements(df)
     rows = {}
     total = max(len(df), 1)
     for column in columns:
-        if column not in df.columns:
+        if column not in display.columns:
             continue
-        series = pd.to_numeric(df[column], errors="coerce")
+        series = pd.to_numeric(display[column], errors="coerce")
         modes = series.mode(dropna=True)
         present = bool(series.notna().any())
         rows[column] = {

@@ -1,0 +1,139 @@
+# Validation rule configuration (Chapter 4, Code Block 4.9).
+#
+# This file is the single source of truth for the validation thresholds and the
+# configurable rule parameters.  The rule engine and the dashboard both load it
+# at runtime, so changing a value here changes behaviour without modifying
+# Python code (R-DQ6, Chapter 4 Section 4.8.1).
+
+version: 1
+
+# Dimension targets (percentages) used for pass/fail evaluation.  The dashboard
+# Metric Table reads these via load_config()["thresholds"].
+thresholds:
+  completeness: 98     # % required non-missing values
+  consistency: 99      # % unique composite keys
+  accuracy: 97         # % conforming values
+  integrity: 99        # % constraint-satisfying records
+
+# Configurable rule parameters.  Consumed by the rule engine.
+rules:
+  r13_budget_overrun:
+    multiplier: 3.0    # cumulative actual cost must not exceed 3x cumulative budget
+  r14_progress_mismatch:
+    tolerance: 0.20    # cumulative spend may exceed expected spend by at most 20%
+
+# Thresholds evaluated in the sensitivity analysis (Chapter 5).
+sensitivity:
+  candidate_thresholds: [95, 98, 99]
+
+# Provenance of the source dataset (Chapter 3).
+dataset:
+  source: "gacevedob/project-portfolio-dataset"
+  license: "CC BY-SA 4.0"
+  principal_workbooks: 8
+  wbs_level_rows: 2727
+  project_period_rows: 76
+
+# Rule catalogue (Table 4.3): dimension, evaluation view and severity per rule.
+# Evaluation views follow Chapter 3 Table 3.9: R1-R7, R10-R12 are WBS-level;
+# R8, R9, R13 and R14 are project-period.  This mirrors data_quality.engine.rules
+# so the dissertation and the code cannot drift apart.
+rule_catalogue:
+  - id: "R1"
+    description: "Missing required fields"
+    dimension: "completeness"
+    basis: "Field presence"
+    evaluation_view: "wbs_level"
+    severity: "high"
+    remediation: "Supply a value for the missing field"
+  - id: "R2"
+    description: "Incorrect data types"
+    dimension: "accuracy"
+    basis: "Field-level type conformance"
+    evaluation_view: "wbs_level"
+    severity: "high"
+    remediation: "Convert the field to the declared datatype"
+  - id: "R3"
+    description: "Invalid period index"
+    dimension: "accuracy"
+    basis: "Field-level domain (>= 1)"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Set period_index to a value >= 1"
+  - id: "R4"
+    description: "Negative cumulative values"
+    dimension: "accuracy"
+    basis: "Field-level domain (>= 0)"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Correct the value to a non-negative number"
+  - id: "R5"
+    description: "Duplicate composite keys"
+    dimension: "consistency"
+    basis: "Key uniqueness"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Remove or re-key the duplicate record"
+  - id: "R6"
+    description: "Inconsistent project names"
+    dimension: "consistency"
+    basis: "Key-to-attribute uniformity"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Align project_name with the master record"
+  - id: "R7"
+    description: "Inconsistent WBS descriptions"
+    dimension: "consistency"
+    basis: "Key-to-attribute uniformity"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Align wbs_description with the master record"
+  - id: "R8"
+    description: "Out-of-order period dates"
+    dimension: "integrity"
+    basis: "Cross-record ordering"
+    evaluation_view: "project_period"
+    severity: "high"
+    remediation: "Verify the reporting period date order"
+  - id: "R9"
+    description: "Decreasing cumulative values"
+    dimension: "integrity"
+    basis: "Cross-record monotonicity"
+    evaluation_view: "project_period"
+    severity: "high"
+    remediation: "Correct the cumulative value so it does not decrease"
+  - id: "R10"
+    description: "Date outside project window"
+    dimension: "accuracy"
+    basis: "Field-level domain (window)"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Verify the reported period date"
+  - id: "R11"
+    description: "Source file mismatch"
+    dimension: "consistency"
+    basis: "Key-to-attribute uniformity"
+    evaluation_view: "wbs_level"
+    severity: "medium"
+    remediation: "Correct the project attribution for this record"
+  - id: "R12"
+    description: "Missing WBS description"
+    dimension: "completeness"
+    basis: "Field presence"
+    evaluation_view: "wbs_level"
+    severity: "high"
+    remediation: "Supply a work package description"
+  - id: "R13"
+    description: "Budget overrun"
+    dimension: "integrity"
+    basis: "Cross-field relationship"
+    evaluation_view: "project_period"
+    severity: "medium"
+    remediation: "Review cost allocation against the PMB"
+  - id: "R14"
+    description: "Spend outruns reported progress"
+    dimension: "integrity"
+    basis: "Cross-field relationship"
+    evaluation_view: "project_period"
+    severity: "medium"
+    remediation: "Review cost allocation or progress reporting"

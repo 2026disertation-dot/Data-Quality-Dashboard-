@@ -520,7 +520,7 @@ def build_report(cleaned, engine_scores, sheet_scores, engine_seconds,
         f"({engine_scores['attributed_pct']}%) |",
         f"| Wall-clock on {record_count} records | {sheet_seconds:.3f}s | "
         f"{engine_seconds:.3f}s |",
-        "| Dual-mode support (batch + incremental) | Not supported | Supported |",
+        "| multi-mode support (batch + incremental) | Not supported | Supported |",
         "| Re-running the checks | Manual, error-prone | Configuration-driven |",
         "",
         "## How each baseline check was expressed",

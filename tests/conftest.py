@@ -28,11 +28,11 @@ def derived_data() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="session")
-def fixtures(raw_data):
+def fixtures(raw_data, derived_data):
     """Derived test sets: batch/incremental split, defects, clean sample."""
     from data_quality.fixtures.builder import build_fixtures
 
-    return build_fixtures(raw_data)
+    return build_fixtures(raw_data, derived_data)
 
 
 @pytest.fixture(scope="session")

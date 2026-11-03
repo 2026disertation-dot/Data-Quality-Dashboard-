@@ -1,9 +1,18 @@
 """
 The validator: orchestrates both contract tiers and produces a result dict.
 
-This is the single entry point used by batch mode, incremental mode and the
-live API.  All three call :meth:`Validator.validate`, so no mode can drift from
-another - which is the dual-mode consistency claim in Chapter 4.
+This is the single entry point used by batch mode, incremental mode, the live
+API and the dashboard.  All four call :meth:`Validator.validate`, so no mode can
+drift from another - which is the multi-mode consistency claim in Chapter 4.
+
+Rule gating follows Chapter 3 Table 3.9:
+
+* WBS-level view:      R1-R7, R10, R11, R12
+* Project-period view: R8, R9, R13, R14
+
+Each rule runs only against the tier for which its evaluation view is defined,
+so no rule is invoked against columns that do not exist on its target tier
+(Chapter 4, Challenges 5 and 7).
 """
 
 from __future__ import annotations
@@ -14,10 +23,8 @@ from typing import Literal
 import pandas as pd
 
 from ..contracts.raw import RAW_CUMULATIVE_COLUMNS, RAW_KEY
-from ..contracts.derived import DERIVED_KEY, DERIVED_MONEY_COLUMNS
+from ..contracts.derived import DERIVED_CUMULATIVE_COLUMNS, DERIVED_KEY
 from .cross_record_rules import (
-    rule_r13_budget_overrun,
-    rule_r14_progress_mismatch,
     rule_r6_project_name_consistency,
     rule_r7_wbs_description_consistency,
     rule_r8_date_ordering,
@@ -87,18 +94,27 @@ class ValidationResult:
         return self.schema_errors + self.findings
 
     @property
+    def invalid_record_keys(self) -> set:
+        """Return distinct record keys associated with findings."""
+        return {
+            finding.record_key
+            for finding in self.all_findings
+            if finding.record_key is not None
+        }
+
+    @property
     def counts(self) -> dict[str, int]:
         """Record-level counts, with valid and invalid always summing to total."""
         return summarise_counts(self.all_findings, self.total_records)
 
     @property
     def invalid_records(self) -> int:
-        return self.counts["invalid_records"]
-
+        """Return the number of distinct invalid records."""
+        return len(self.invalid_record_keys)
     @property
     def valid_records(self) -> int:
-        return self.counts["valid_records"]
-
+        """Return the number of records without findings."""
+        return self.total_records - self.invalid_records
     def findings_by_rule(self) -> dict[str, int]:
         """Count findings per rule id, ordered R1..R12."""
         out: dict[str, int] = {}
@@ -226,9 +242,14 @@ class Validator:
         Returns:
             ValidationResult: Counts plus every finding.
         """
+        if tier not in ("raw", "derived"):
+            raise ValueError(f"Unsupported tier: {tier!r}. Expected 'raw' or 'derived'.")
+        key = list(RAW_KEY) if tier == "raw" else list(DERIVED_KEY)
+        expected = RAW_EXPECTED_TYPES if tier == "raw" else DERIVED_EXPECTED_TYPES
+
         # Captured before coercion: an unreadable date becomes NaT afterwards,
         # and NaT reads as *missing*, which would misattribute a type error to R1.
-        unreadable = _unreadable_date_findings(df, RAW_KEY, RAW_EXPECTED_TYPES)
+        unreadable = _unreadable_date_findings(df, key, expected)
         normalised = normalise_types(df)
 
         if tier == "raw":
@@ -263,54 +284,17 @@ class Validator:
             )
         return findings
 
-    @staticmethod
-    def _r9_with_context(
-        df: pd.DataFrame,
-        existing: pd.DataFrame | None,
-        key_columns: list[str],
-        group_columns: list[str] | None = None,
-        value_columns: list[str] | None = None,
-    ) -> list[Finding]:
-        """Run R9, using prior records as history when available.
-
-        R9 is the only rule that needs context from outside the new batch: a
-        running total is defined by everything reported before it.  When
-        ``existing`` is supplied the two frames are stacked and only findings
-        whose composite key belongs to the new rows are returned.
-        """
-        group_columns = group_columns or ["project_id", "wbs_code"]
-        value_columns = value_columns or RAW_CUMULATIVE_COLUMNS
-
-        needed = set(group_columns) | {"period_index"} | set(value_columns)
-        if not needed <= set(df.columns):
-            return []
-
-        if existing is None or len(existing) == 0:
-            return rule_r9_cumulative_monotonicity(
-                df, key_columns, group_columns, value_columns
-            )
-
-        if not needed <= set(existing.columns):
-            return []
-
-        stacked = pd.concat([existing, df], ignore_index=True)
-        findings = rule_r9_cumulative_monotonicity(
-            stacked, key_columns, group_columns, value_columns
-        )
-
-        # Keep only findings that land on a row the caller actually submitted.
-        new_keys = {
-            "|".join(str(v) for v in row)
-            for row in df[key_columns].itertuples(index=False, name=None)
-        }
-        return [f for f in findings if f.record_key in new_keys]
-
     # -- raw tier ---------------------------------------------------------
 
     def _validate_raw(
         self, df: pd.DataFrame, existing: pd.DataFrame | None
     ) -> ValidationResult:
-        """Validate WBS-level records against rules R1-R12."""
+        """Validate WBS-level records against rules R1-R7, R10, R11, R12.
+
+        The WBS-level view (Chapter 3 Table 3.9) applies the record-level rules
+        and the cross-record rules that read WBS columns.  R8, R9, R13 and R14
+        are project-period rules and are deliberately **not** run here.
+        """
         key = list(RAW_KEY)
         result = ValidationResult(tier="raw", total_records=len(df))
         result.schema_errors = self._schema_findings(df, RAW_REQUIRED)
@@ -326,13 +310,9 @@ class Validator:
         result.findings.extend(rule_r5_duplicate_key(df, key))
         result.findings.extend(rule_r6_project_name_consistency(df, key))
         result.findings.extend(rule_r7_wbs_description_consistency(df, key))
-        result.findings.extend(rule_r8_date_ordering(df, key, series))
         result.findings.extend(rule_r10_date_window(df, key, series))
         result.findings.extend(rule_r11_source_file_consistency(df, key))
         result.findings.extend(rule_r12_wbs_description_present(df, key))
-        result.findings.extend(
-            self._r9_with_context(df, existing, key, series, RAW_CUMULATIVE_COLUMNS)
-        )
         return result
 
     # -- derived tier -----------------------------------------------------
@@ -340,94 +320,46 @@ class Validator:
     def _validate_derived(
         self, df: pd.DataFrame, existing: pd.DataFrame | None
     ) -> ValidationResult:
-        """Validate time-phased project records.
+        """Validate project-period records against rules R8, R9, R13, R14.
 
-        The derived tier has no WBS columns, so the WBS-specific rules R6, R7,
-        R11 and R12 do not apply and are skipped rather than reported as
-        passes.  R8 is re-expressed as the baseline-date relationship, which is
-        the derived contract's equivalent constraint.
+        The project-period view (Chapter 3 Table 3.9) applies only the four
+        rules defined on the derived contract.  The WBS-specific rules
+        (R1-R7, R10-R12) read columns that do not exist on the 8-field derived
+        contract and are deliberately **not** run here (Chapter 4, Challenge 7).
+        R8 and R9 read a project's period sequence, so prior periods supplied as
+        ``existing`` are stacked as history and only findings landing on the
+        submitted rows are returned.
         """
         key = list(DERIVED_KEY)
         result = ValidationResult(tier="derived", total_records=len(df))
         result.schema_errors = self._schema_findings(df, DERIVED_REQUIRED)
 
-        money = [c for c in DERIVED_MONEY_COLUMNS if c in df.columns]
+        # R8/R9 read the project's period sequence.  When prior periods are
+        # supplied, stack them so a restatement that reverses a running total,
+        # or a date that moves backwards, is still caught; then keep only the
+        # findings that land on the submitted rows.
+        context = df
+        if (
+            existing is not None
+            and len(existing)
+            and {"project_id", "time_period"} <= set(existing.columns)
+        ):
+            context = pd.concat([existing, df], ignore_index=True)
 
-        result.findings.extend(rule_r1_missing_required(df, key, DERIVED_REQUIRED))
-        result.findings.extend(rule_r2_datatypes(df, key, DERIVED_EXPECTED_TYPES))
-        result.findings.extend(rule_r4_negative_values(df, key, money))
-        result.findings.extend(rule_r5_duplicate_key(df, key))
-        result.findings.extend(self._baseline_date_ordering(df, key))
-        result.findings.extend(self._cumulative_with_context(df, existing, key))
-        result.findings.extend(
-            self._r9_with_context(df, existing, key, ["project_id"], money)
+        history_findings = rule_r8_date_ordering(context, key)
+        history_findings += rule_r9_cumulative_monotonicity(
+            context, key, ["project_id"], DERIVED_CUMULATIVE_COLUMNS
         )
-
-        # R13 and R14 were previously *also* run directly here, on top of
-        # _cumulative_with_context above, so every R13/R14 finding was
-        # reported twice - the real dataset showed 34 events for 17 flagged
-        # records.  The context helper is the single evaluation point: it
-        # stacks prior history when there is any and keeps only findings that
-        # land on the rows the caller submitted.
-        return result
-
-    @staticmethod
-    def _cumulative_with_context(
-        df: pd.DataFrame, existing: pd.DataFrame | None, key: list[str]
-    ) -> list[Finding]:
-        """Run R13 and R14, using prior records as history when available.
-
-        Both rules read a project's running totals, so validating a single new
-        period in isolation would judge it against a near-empty cumulative
-        position and either miss a genuine overrun or invent one.  When
-        ``existing`` is supplied the frames are stacked and only findings whose
-        composite key belongs to the new rows are returned.
-        """
-        from .cross_record_rules import _in_period_order, _running_total  # noqa: F401
-
-        needed = {"project_id", "pmb_budget", "actual_cost", "progress_pct"}
-        if not needed <= set(df.columns):
-            return []
-
-        frame = df
-        if existing is not None and len(existing) and needed <= set(existing.columns):
-            stacked = pd.concat([existing, df], ignore_index=True)
-            findings = rule_r13_budget_overrun(stacked, key) + rule_r14_progress_mismatch(stacked, key)
+        if context is not df:
             new_keys = {
                 "|".join(str(v) for v in row)
                 for row in df[key].itertuples(index=False, name=None)
             }
-            return [f for f in findings if f.record_key in new_keys]
+            history_findings = [
+                f for f in history_findings if f.record_key in new_keys
+            ]
 
-        frame = df
-        return rule_r13_budget_overrun(frame, key) + rule_r14_progress_mismatch(frame, key)
-
-    @staticmethod
-    def _baseline_date_ordering(df: pd.DataFrame, key: list[str]) -> list[Finding]:
-        """R8 on the derived tier: actual_date must not precede the baseline.
-
-        This is the derived contract's counterpart to the raw tier's
-        period-date ordering rule, and it is a genuine per-record check: it
-        needs no neighbouring row.
-        """
-        findings: list[Finding] = []
-        needed = {"actual_date", "baseline_start_date"}
-        if not needed <= set(df.columns):
-            return findings
-
-        dates = pd.to_datetime(df["actual_date"], errors="coerce")
-        baselines = pd.to_datetime(df["baseline_start_date"], errors="coerce")
-        for position in df.index[dates < baselines]:
-            row = df.loc[position]
-            findings.append(
-                _finding(
-                    "R8",
-                    "|".join(str(row.get(c, "")) for c in key),
-                    "actual_date",
-                    f"actual_date {row['actual_date']:%Y-%m-%d} precedes "
-                    f"baseline_start_date {row['baseline_start_date']:%Y-%m-%d}",
-                    "Verify the reporting period against the project baseline",
-                )
-            )
-        return findings
-        return [f for f in findings if f.record_key in new_keys]
+        result.findings.extend(history_findings)
+        result.findings.extend(rule_r13_budget_overrun(df, key))
+        result.findings.extend(rule_r14_progress_mismatch(df, key))
+        return result

@@ -6,7 +6,7 @@ The dashboard's evidence base is the cleaned Project Portfolio Dataset
 real data rather than from synthetic records. This module derives the test
 material the research evaluation calls for:
 
-* a **batch/incremental split** of the real records, so dual-mode behaviour and
+* a **batch/incremental split** of the real records, so multi-mode behaviour and
   regression consistency can be measured on genuine cost data. The split is
   chronological: the newest reporting period of every project is held back as
   the *incremental* arrival, and everything before it is the *batch* history;

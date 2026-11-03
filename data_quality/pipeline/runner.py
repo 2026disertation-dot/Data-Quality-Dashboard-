@@ -1,11 +1,11 @@
 """
 The pipeline: batch and incremental modes over one validator.
 
-Dual-mode consistency is enforced structurally rather than by convention.
+multi-mode consistency is enforced structurally rather than by convention.
 :class:`DataPipeline` holds a single :class:`~data_quality.engine.validator.Validator`
 instance and every mode routes through it, so a record cannot be accepted in one
 mode and rejected in another.  The regression test in
-``tests/test_dual_mode.py`` asserts this rather than assuming it.
+``tests/test_multi_mode.py`` asserts this rather than assuming it.
 """
 
 from __future__ import annotations
@@ -75,12 +75,11 @@ class DataPipeline:
             dict: Result payload including counts, scores and findings.
         """
         self.mode = "incremental"
+        # The derived contract stores cumulative values, so earlier periods are
+        # the baseline R9 (monotonicity), R13 and R14 compare against.  History
+        # is therefore used on both tiers; a new period is judged against the
+        # project's running position, not in isolation.
         history = existing if existing is not None else self.store
-
-        if history is not None and tier == "derived" and "time_period" in new_records:
-            # A derived frame carries period *movements*, so a later arrival is
-            # a new period rather than a restatement of an old one.
-            history = None
 
         result = self.validator.validate(new_records, tier=tier, existing=history)
         payload = self._payload(result, tier, mode="incremental")

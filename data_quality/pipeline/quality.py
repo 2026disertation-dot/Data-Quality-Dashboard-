@@ -24,14 +24,15 @@ from __future__ import annotations
 import pandas as pd
 
 from ..contracts.raw import RAW_CUMULATIVE_COLUMNS, RAW_KEY
+from ..contracts.derived import DERIVED_CUMULATIVE_COLUMNS, DERIVED_KEY
 from ..engine.validator import Validator, normalise_types
 
-#: Target thresholds from Table 3.2.
+#: Target thresholds from Chapter 3, Table 3.5.
 TARGETS = {
     "completeness": 98.0,
     "consistency": 99.0,
     "accuracy": 97.0,
-    "integrity": 90.0,
+    "integrity": 99.0,
 }
 
 WEIGHTS = {
@@ -84,7 +85,7 @@ def score_dimensions(
         completeness = 0.0
 
     # -- consistency -----------------------------------------------------
-    key = [c for c in (RAW_KEY if tier == "raw" else ["project_id", "time_period"]) if c in frame.columns]
+    key = [c for c in (RAW_KEY if tier == "raw" else DERIVED_KEY) if c in frame.columns]
     if len(key) == 2:
         duplicates = int(frame.duplicated(subset=key).sum())
         consistency = _pct(total_rows - duplicates, total_rows)
@@ -125,8 +126,5 @@ def _required_for(tier: str) -> list[str]:
 
 
 def _money_columns(tier: str, frame: pd.DataFrame) -> list[str]:
-    if tier == "raw":
-        return [c for c in RAW_CUMULATIVE_COLUMNS if c in frame.columns]
-    return [
-        c for c in ("pmb_budget", "actual_cost", "revenue_claimed") if c in frame.columns
-    ]
+    columns = RAW_CUMULATIVE_COLUMNS if tier == "raw" else DERIVED_CUMULATIVE_COLUMNS
+    return [c for c in columns if c in frame.columns]

@@ -7,15 +7,18 @@ the cleaning stage produces, which is the shape the dashboard reasons about.
 
 Why the derived tier exists
 ---------------------------
-The raw records are cumulative per work package.  A monthly cost record, by
-contrast, holds the movement for one reporting period.  Two rules only make
-sense on the derived shape:
+The derived records store the same *cumulative* figures as the raw WBS-level
+contract, but aggregated from leaf-level work packages up to one row per
+project and reporting period.  Keeping them cumulative is what lets the
+project-period rules operate on the correct semantics (Chapter 4, Challenge 6):
 
-* cumulative spend must stay within a multiple of cumulative budget
-* cumulative spend must not outrun reported progress
+* cumulative spend must stay within a multiple of cumulative budget (R13)
+* cumulative spend must not outrun reported progress (R14)
+* cumulative totals must not decrease over time (R9)
 
-Both need a project-level running total across periods, which does not exist at
-WBS granularity.
+Period movements are a display concern only; the dashboard derives them on the
+fly for chart readability, but validation always consumes the cumulative
+values.
 
 Granularity
 -----------
@@ -24,11 +27,12 @@ across 8 projects and 14 reporting periods.
 
 Non-negotiables for the derived transform
 ------------------------------------------
-``data_quality/preprocess/clean.py`` de-cumulativises the raw series by differencing
-consecutive snapshots.  A falling snapshot therefore becomes a *negative period
-movement*, which would make every downstream non-negativity rule fire.  The
-cleaning stage floors such movements at zero and reports the count; this module
-holds the target schema, and the floor is applied upstream in the transform.
+``data_quality/preprocess/clean.py`` aggregates leaf-level WBS records and
+stores the summed cumulative planned value, actual cost and earned value
+directly as ``pmb_budget``, ``actual_cost`` and ``revenue_claimed``.  It does
+**not** de-cumulativise on the validation path: a diverging snapshot must remain
+visible to R9 (Chapter 4, Challenge 6).  ``de_cumulativise`` is retained for
+dashboard display only.
 """
 
 import pandera as pa
@@ -37,8 +41,10 @@ from pandera import Check, Column
 #: Composite key for the derived tier.  Uniqueness is rule R5.
 DERIVED_KEY = ["project_id", "time_period"]
 
-#: Period-level movement columns.  These must be non-negative (rule R4).
-DERIVED_MONEY_COLUMNS = [
+#: Cumulative monetary columns.  These are the columns rule R9 checks for
+#: monotonicity on the project-period view and R13/R14 compare against each
+#: other.  They must be non-negative (rule R4).
+DERIVED_CUMULATIVE_COLUMNS = [
     "pmb_budget",
     "actual_cost",
     "revenue_claimed",
@@ -78,7 +84,10 @@ def derived_schema(strict: bool = True) -> pa.DataFrameSchema:
                 required=True,
                 coerce=True,
                 nullable=False,
-                description="Period planned budget, de-cumulativised",
+                description=(
+                    "CUMULATIVE Performance Measurement Baseline "
+                    "(equivalently pv_cum)"
+                ),
             ),
             "actual_cost": Column(
                 float,
@@ -86,7 +95,7 @@ def derived_schema(strict: bool = True) -> pa.DataFrameSchema:
                 required=True,
                 coerce=True,
                 nullable=False,
-                description="Period actual cost, de-cumulativised",
+                description="CUMULATIVE actual cost (equivalently ac_cum)",
             ),
             "progress_pct": Column(
                 float,
@@ -94,7 +103,10 @@ def derived_schema(strict: bool = True) -> pa.DataFrameSchema:
                 required=True,
                 coerce=True,
                 nullable=False,
-                description="Cumulative completion reported for the project",
+                description=(
+                    "Progress percentage, derived as "
+                    "revenue_claimed / max(pmb_budget) x 100"
+                ),
             ),
             "revenue_claimed": Column(
                 float,
@@ -102,7 +114,7 @@ def derived_schema(strict: bool = True) -> pa.DataFrameSchema:
                 required=True,
                 coerce=True,
                 nullable=False,
-                description="Period revenue claimed, de-cumulativised",
+                description="CUMULATIVE earned value (equivalently ev_cum)",
             ),
             "actual_date": Column(
                 "datetime64[ns]",
